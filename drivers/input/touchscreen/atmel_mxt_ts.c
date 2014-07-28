@@ -723,7 +723,16 @@ static void mxt_input_report(struct mxt_data *data)
 					finger[id].pressure);
 			input_report_abs(input_dev, ABS_MT_ORIENTATION,
 					finger[id].vector);
+
+			if (id == 0) {
+				input_report_key(input_dev, BTN_TOUCH, 1);
+				input_report_abs(input_dev, ABS_X, finger[id].x);
+				input_report_abs(input_dev, ABS_Y, finger[id].y);
+			}
 		} else {
+			if (id == 0)
+				input_report_key(input_dev, BTN_TOUCH, 0);
+
 			finger[id].status = 0;
 		}
 	}
@@ -1961,7 +1970,9 @@ static int __devinit mxt_probe(struct i2c_client *client,
 	mxt_calc_resolution(data);
 
 	__set_bit(EV_ABS, input_dev->evbit);
+	__set_bit(EV_KEY, input_dev->evbit);
 	__set_bit(INPUT_PROP_DIRECT, input_dev->propbit);
+	__set_bit(BTN_TOUCH, input_dev->keybit);
 
 	input_mt_init_slots(input_dev, MXT_MAX_FINGER);
 	input_set_abs_params(input_dev, ABS_MT_TOUCH_MAJOR,
@@ -1974,6 +1985,10 @@ static int __devinit mxt_probe(struct i2c_client *client,
 			     0, 255, 0, 0);
 	input_set_abs_params(input_dev, ABS_MT_ORIENTATION,
 			     0, 255, 0, 0);
+	input_set_abs_params(input_dev, ABS_X,
+			     0, data->max_x, 0, 0);
+	input_set_abs_params(input_dev, ABS_Y,
+			     0, data->max_y, 0, 0);
 
 	input_set_drvdata(input_dev, data);
 	i2c_set_clientdata(client, data);
