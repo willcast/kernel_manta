@@ -838,13 +838,6 @@ static int manta_bat_get_property(struct power_supply *ps,
 	case POWER_SUPPLY_PROP_CHARGE_ENABLED:
 		val->intval = manta_bat_chg_enabled;
 		return 0;
-	case POWER_SUPPLY_PROP_CAPACITY:
-		if (manta_bat_get_ds2784())
-			return -EIO;
-		return manta_bat_ds2784_battery->get_property(
-			manta_bat_ds2784_battery, POWER_SUPPLY_PROP_CAPACITY,
-			val);
-
 	default:
 		return -EINVAL;
 	}
@@ -864,7 +857,6 @@ static int manta_bat_property_is_writeable(struct power_supply *psy,
 }
 static enum power_supply_property manta_battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_ENABLED,
-	POWER_SUPPLY_PROP_CAPACITY,
 };
 
 static void manta_bat_power_changed(struct power_supply *psy)
