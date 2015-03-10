@@ -2046,7 +2046,6 @@ static int __devinit hdmi_resources_init(struct hdmi_context *hdata)
 	struct device *dev = hdata->dev;
 	struct hdmi_resources *res = &hdata->res;
 	static char *supply[] = {
-		"hdmi-en",
 		"vdd",
 		"vdd_osc",
 		"vdd_pll",
@@ -2086,6 +2085,7 @@ static int __devinit hdmi_resources_init(struct hdmi_context *hdata)
 
 	clk_set_parent(res->sclk_hdmi, res->sclk_pixel);
 
+#if 0
 	res->regul_bulk = kzalloc(ARRAY_SIZE(supply) *
 		sizeof res->regul_bulk[0], GFP_KERNEL);
 	if (!res->regul_bulk) {
@@ -2102,6 +2102,7 @@ static int __devinit hdmi_resources_init(struct hdmi_context *hdata)
 		goto fail;
 	}
 	res->regul_count = ARRAY_SIZE(supply);
+#endif
 
 	return 0;
 fail:
@@ -2113,9 +2114,9 @@ static int hdmi_resources_cleanup(struct hdmi_context *hdata)
 {
 	struct hdmi_resources *res = &hdata->res;
 
-	regulator_bulk_free(res->regul_count, res->regul_bulk);
+//	regulator_bulk_free(res->regul_count, res->regul_bulk);
 	/* kfree is NULL-safe */
-	kfree(res->regul_bulk);
+//	kfree(res->regul_bulk);
 	if (!IS_ERR_OR_NULL(res->hdmiphy))
 		clk_put(res->hdmiphy);
 	if (!IS_ERR_OR_NULL(res->sclk_hdmiphy))
@@ -2138,7 +2139,8 @@ static void hdmi_resource_poweron(struct hdmi_context *hdata)
 	DRM_DEBUG_KMS("[%d] %s\n", __LINE__, __func__);
 
 	/* turn HDMI power on */
-	regulator_bulk_enable(res->regul_count, res->regul_bulk);
+//	regulator_bulk_enable(res->regul_count, res->regul_bulk);
+
 	/* power-on hdmi physical interface */
 	clk_enable(res->hdmiphy);
 	/* turn clocks on */
@@ -2163,7 +2165,7 @@ static void hdmi_resource_poweroff(struct hdmi_context *hdata)
 	/* power-off hdmiphy */
 	clk_disable(res->hdmiphy);
 	/* turn HDMI power off */
-	regulator_bulk_disable(res->regul_count, res->regul_bulk);
+//	regulator_bulk_disable(res->regul_count, res->regul_bulk);
 }
 
 static int hdmi_runtime_suspend(struct device *dev)

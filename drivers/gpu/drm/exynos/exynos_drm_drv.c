@@ -98,8 +98,10 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	 * to the sub driver and create encoder and connector for them.
 	 */
 	ret = exynos_drm_device_register(dev);
-	if (ret)
+	if (ret) {
+		DRM_ERROR("exynos_drm_device_register failed\n");
 		goto err_vblank;
+	}
 
 	/* setup possible_clones. */
 	exynos_drm_encoder_setup(dev);
@@ -252,9 +254,15 @@ static struct drm_driver exynos_drm_driver = {
 
 static int exynos_drm_platform_probe(struct platform_device *pdev)
 {
+	int ret;
+
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
 	exynos_drm_driver.num_ioctls = DRM_ARRAY_SIZE(exynos_ioctls);
+
+	ret = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
+	if (ret)
+		return ret;
 
 	return drm_platform_init(&exynos_drm_driver, pdev);
 }
@@ -286,31 +294,47 @@ static int __init exynos_drm_init(void)
 #ifdef CONFIG_DRM_EXYNOS_FIMD
 	ret = platform_driver_register(&fimd_driver);
 	if (ret < 0)
+	{
+		DRM_ERROR("Failed to register fimd\n");
 		goto out_fimd;
+	}
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_HDMI
 	ret = platform_driver_register(&hdmi_driver);
 	if (ret < 0)
+	{
+		DRM_ERROR("Failed to register HDMI\n");
 		goto out_hdmi;
+	}
+
 	ret = platform_driver_register(&mixer_driver);
 	if (ret < 0)
+	{
+		DRM_ERROR("Failed to register mixer\n");
 		goto out_mixer;
+	}
+
 	ret = platform_driver_register(&exynos_drm_common_hdmi_driver);
-	if (ret < 0)
+	if (ret < 0) {
+		DRM_ERROR("Failed to register common_hdmi\n");
 		goto out_common_hdmi;
+	}
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_VIDI
 	ret = platform_driver_register(&vidi_driver);
-	if (ret < 0)
+	if (ret < 0) {
+		DRM_ERROR("Failed to register vidi");
 		goto out_vidi;
+	}
 #endif
-
+	DRM_DEBUG_DRIVER("About to register toplevel\n");
 	ret = platform_driver_register(&exynos_drm_platform_driver);
-	if (ret < 0)
+	if (ret < 0) {
+		DRM_ERROR("Failed to register driver\n");
 		goto out;
-
+	}
 	return 0;
 
 out:

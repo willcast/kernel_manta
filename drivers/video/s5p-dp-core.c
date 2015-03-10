@@ -949,7 +949,7 @@ static int s5p_dp_config_video(struct s5p_dp_device *dp,
 			break;
 		if (DP_TIMEOUT_LOOP_COUNT < timeout_loop) {
 			dev_err(dp->dev, "Timeout of video streamclk ok\n");
-			return -ETIMEDOUT;
+			break;
 		}
 
 		usleep_range(1, 1);

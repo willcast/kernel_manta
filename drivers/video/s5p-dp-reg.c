@@ -1104,7 +1104,7 @@ int s5p_dp_is_slave_video_stream_clock_on(struct s5p_dp_device *dp)
 	reg = readl(dp->reg_base + S5P_DP_SYS_CTL_1);
 
 	if (!(reg & DET_STA)) {
-		dev_dbg(dp->dev, "Input stream clock not detected.\n");
+		dev_err(dp->dev, "Input stream clock not detected.\n");
 		return -EINVAL;
 	}
 
@@ -1115,7 +1115,7 @@ int s5p_dp_is_slave_video_stream_clock_on(struct s5p_dp_device *dp)
 	dev_dbg(dp->dev, "wait SYS_CTL_2.\n");
 
 	if (reg & CHA_STA) {
-		dev_dbg(dp->dev, "Input stream clk is changing\n");
+		dev_err(dp->dev, "Input stream clk is changing\n");
 		return -EINVAL;
 	}
 

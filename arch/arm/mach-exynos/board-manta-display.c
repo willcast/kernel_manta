@@ -37,6 +37,9 @@
 #include <mach/regs-clock.h>
 #include <mach/sysmmu.h>
 
+#include <drm/exynos_drm.h>
+ 
+
 #include "common.h"
 
 #define GPIO_LCD_EN		EXYNOS5_GPH1(7)
@@ -59,7 +62,7 @@ extern phys_addr_t manta_bootloader_fb_size;
 
 static ktime_t lcd_on_time;
 
-static void manta_lcd_on(void)
+void manta_lcd_on(void)
 {
 	s64 us = ktime_us_delta(lcd_on_time, ktime_get_boottime());
 	if (us > LCD_POWER_OFF_TIME_US) {
@@ -74,20 +77,20 @@ static void manta_lcd_on(void)
 	usleep_range(200000, 200000);
 }
 
-static void manta_lcd_off(void)
+void manta_lcd_off(void)
 {
 	gpio_set_value(GPIO_LCD_EN, 0);
 
 	lcd_on_time = ktime_add_us(ktime_get_boottime(), LCD_POWER_OFF_TIME_US);
 }
 
-static void manta_backlight_on(void)
+void manta_backlight_on(void)
 {
 	usleep_range(97000, 97000);
 	gpio_set_value(GPIO_LED_BL_RST, 1);
 }
 
-static void manta_backlight_off(void)
+void manta_backlight_off(void)
 {
 	/* LED_BACKLIGHT_RESET: XCI1RGB_5 => GPG0_5 */
 	gpio_set_value(GPIO_LED_BL_RST, 0);
@@ -228,6 +231,22 @@ static struct s5p_hdmi_platdata hdmi_platdata __initdata = {
 	.hdmiphy_enable = manta_hdmiphy_enable,
 };
 
+static struct exynos_drm_common_hdmi_pd exynos_device_drm_hdmi_platdata = {
+	.hdmi_dev = &(s5p_device_hdmi.dev),
+	.mixer_dev = &(s5p_device_mixer.dev),
+};
+
+static struct platform_device exynos_device_drm_hdmi = {
+	.name = "exynos-drm-hdmi",
+	.dev = {
+		.platform_data = &exynos_device_drm_hdmi_platdata,
+	}
+};
+
+static struct platform_device exynos_device_drm = {
+	.name = "exynos-drm",
+};
+
 static struct platform_device *manta_display_devices[] __initdata = {
 	&exynos_device_md0,
 	&exynos_device_md1,
@@ -240,6 +259,9 @@ static struct platform_device *manta_display_devices[] __initdata = {
 	&s5p_device_i2c_hdmiphy,
 	&s5p_device_mixer,
 	&s5p_device_hdmi,
+
+	&exynos_device_drm_hdmi,
+	&exynos_device_drm,
 };
 
 void __init exynos5_manta_display_init(void)

@@ -92,6 +92,28 @@ struct fimd_context {
 	struct exynos_drm_panel_info *panel;
 };
 
+extern void manta_lcd_on(void);
+extern void manta_lcd_off(void);
+extern void manta_backlight_on(void);
+extern void manta_backlight_off(void);
+
+static struct exynos_drm_panel_info manta_drm_panel_info = {
+        .timing = {
+	        .name = "Default",
+	        .xres = 2560,
+        	.yres = 160,
+	        .left_margin    = 80,
+        	.right_margin   = 48,
+	        .upper_margin   = 37,
+        	.lower_margin   = 3,
+	        .hsync_len      = 32,
+        	.vsync_len      = 6,
+	        .sync = 0,
+	},
+        .width_mm = 218,
+        .height_mm = 136,
+};
+
 static bool fimd_display_is_connected(struct device *dev)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -107,7 +129,8 @@ static void *fimd_get_panel(struct device *dev)
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	return ctx->panel;
+//	return ctx->panel;
+	return &manta_drm_panel_info;
 }
 
 static int fimd_check_timing(struct device *dev, void *timing)
@@ -154,12 +177,21 @@ static void fimd_dpms(struct device *subdrv_dev, int mode)
 		 */
 		if (ctx->suspended)
 			pm_runtime_get_sync(subdrv_dev);
+
+		manta_lcd_on();
+		manta_backlight_on();
+
 		break;
+
 	case DRM_MODE_DPMS_STANDBY:
 	case DRM_MODE_DPMS_SUSPEND:
 	case DRM_MODE_DPMS_OFF:
 		if (!ctx->suspended)
 			pm_runtime_put_sync(subdrv_dev);
+
+		manta_lcd_off();
+		manta_backlight_off();
+
 		break;
 	default:
 		DRM_DEBUG_KMS("unspecified mode %d\n", mode);
