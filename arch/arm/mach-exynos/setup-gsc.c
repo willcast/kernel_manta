@@ -1,4 +1,4 @@
-/* linux/arch/arm/mach-exynos/setup-gsc.c
+/ linux/arch/arm/mach-exynos/setup-gsc.c
  *
  * Copyright (c) 2011 Samsung Electronics Co., Ltd.
  *             http://www.samsung.com
@@ -22,6 +22,7 @@
 
 void __init exynos5_gsc_set_pdev_name(int id, char *name)
 {
+#ifdef CONFIG_VIDEO_EXYNOS_GSCALER
 	switch (id) {
 	case 0:
 		exynos5_device_gsc0.name = name;
@@ -36,4 +37,5 @@ void __init exynos5_gsc_set_pdev_name(int id, char *name)
 		exynos5_device_gsc3.name = name;
 		break;
 	}
+#endif
 }

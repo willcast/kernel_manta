@@ -18,6 +18,7 @@
 #include <mach/regs-clock.h>
 #include <media/exynos_fimc_is.h>
 
+#ifndef CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED
 static struct resource exynos5_fimc_is_resource[] = {
 	[0] = {
 		.start	= EXYNOS5_PA_FIMC_IS,
@@ -47,9 +48,11 @@ struct platform_device exynos5_device_fimc_is = {
 struct exynos5_platform_fimc_is exynos5_fimc_is_default_data __initdata = {
 	.hw_ver = 15,
 };
+#endif
 
 void __init exynos5_fimc_is_set_platdata(struct exynos5_platform_fimc_is *pd)
 {
+#ifndef CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED
 	struct exynos5_platform_fimc_is *npd;
 
 	if (!pd)
@@ -76,4 +79,5 @@ void __init exynos5_fimc_is_set_platdata(struct exynos5_platform_fimc_is *pd)
 
 		exynos5_device_fimc_is.dev.platform_data = npd;
 	}
+#endif
 }

@@ -491,13 +491,13 @@ EXYNOS_PM_DEV(mixer, mixer, &s5p_device_mixer, "mixer");
 #ifdef CONFIG_S5P_DEV_DP
 EXYNOS_PM_DEV(dp, dp, &s5p_device_dp, "dp");
 #endif
-#ifdef CONFIG_EXYNOS5_DEV_GSC
+#if defined(CONFIG_EXYNOS5_DEV_GSC) && defined(CONFIG_VIDEO_EXYNOS_GSCALER)
 EXYNOS_PM_DEV(gscl0, gscl0, &exynos5_device_gsc0, "gscl");
 EXYNOS_PM_DEV(gscl1, gscl1, &exynos5_device_gsc1, "gscl");
 EXYNOS_PM_DEV(gscl2, gscl2, &exynos5_device_gsc2, "gscl");
 EXYNOS_PM_DEV(gscl3, gscl3, &exynos5_device_gsc3, "gscl");
 #endif
-#ifdef CONFIG_EXYNOS4_DEV_FIMC_IS
+#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS) && !defined(CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED)
 EXYNOS_PM_DEV(isp, isp, &exynos5_device_fimc_is, NULL);
 #endif
 #ifdef CONFIG_MALI_T6XX
@@ -527,7 +527,7 @@ static struct exynos_pm_dev *exynos_pm_devs[] = {
 	&exynos5_pm_dev_gscl2,
 	&exynos5_pm_dev_gscl3,
 #endif
-#ifdef CONFIG_EXYNOS4_DEV_FIMC_IS
+#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS) && !defined(CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED)
 	&exynos5_pm_dev_isp,
 #endif
 #ifdef CONFIG_MALI_T6XX
@@ -622,7 +622,7 @@ static int __init exynos5_pm_init_power_domain(void)
 	exynos_pm_add_dev_to_genpd(&exynos5_device_gsc2, &exynos5_pd_gscl2);
 	exynos_pm_add_dev_to_genpd(&exynos5_device_gsc3, &exynos5_pd_gscl3);
 #endif
-#ifdef CONFIG_EXYNOS4_DEV_FIMC_IS
+#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS) && !defined(CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED)
 	exynos_pm_add_dev_to_genpd(&exynos5_device_fimc_is, &exynos5_pd_isp);
 	exynos_pm_add_subdomain_to_genpd(&exynos5_pd_gscl.pd, &exynos5_pd_isp.pd);
 #endif

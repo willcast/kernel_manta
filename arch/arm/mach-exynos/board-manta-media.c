@@ -27,12 +27,18 @@
 #include <mach/sysmmu.h>
 
 static struct platform_device *media_devices[] __initdata = {
+#ifdef CONFIG_VIDEO_EXYNOS_MFC
 	&s5p_device_mfc,
+#endif
+#ifdef CONFIG_VIDEO_EXYNOS_GSCALER
 	&exynos5_device_gsc0,
 	&exynos5_device_gsc1,
 	&exynos5_device_gsc2,
 	&exynos5_device_gsc3,
+#endif
+#ifdef CONFIG_VIDEO_EXYNOS_JPEG
 	&s5p_device_jpeg,
+#endif
 	&s5p_device_fimg2d,
 };
 
@@ -47,7 +53,10 @@ static struct fimg2d_platdata fimg2d_data __initdata = {
 
 static void __init manta_media_sysmmu_init(void)
 {
+#ifdef CONFIG_VIDEO_EXYNOS_MFC
 	platform_set_sysmmu(&SYSMMU_PLATDEV(mfc_lr).dev, &s5p_device_mfc.dev);
+#endif
+#ifdef CONFIG_VIDEO_EXYNOS_GSCALER
 	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc0).dev,
 			    &exynos5_device_gsc0.dev);
 	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc1).dev,
@@ -56,8 +65,11 @@ static void __init manta_media_sysmmu_init(void)
 			    &exynos5_device_gsc2.dev);
 	platform_set_sysmmu(&SYSMMU_PLATDEV(gsc3).dev,
 			    &exynos5_device_gsc3.dev);
+#endif
+#ifdef CONFIG_VIDEO_EXYNOS_JPEG
 	platform_set_sysmmu(&SYSMMU_PLATDEV(jpeg).dev,
 			    &s5p_device_jpeg.dev);
+#endif
 	platform_set_sysmmu(&SYSMMU_PLATDEV(2d).dev,
 			    &s5p_device_fimg2d.dev);
 }
@@ -67,6 +79,7 @@ void __init exynos5_manta_media_init(void)
 	manta_media_sysmmu_init();
 	s5p_mfc_set_platdata(&manta_mfc_pd);
 
+#ifdef CONFIG_VIDEO_EXYNOS_GSCALER
 	s3c_set_platdata(&exynos_gsc0_default_data,
 			 sizeof(exynos_gsc0_default_data),
 			 &exynos5_device_gsc0);
@@ -79,9 +92,12 @@ void __init exynos5_manta_media_init(void)
 	s3c_set_platdata(&exynos_gsc3_default_data,
 			 sizeof(exynos_gsc3_default_data),
 			 &exynos5_device_gsc3);
+#endif
 
 	s5p_fimg2d_set_platdata(&fimg2d_data);
+#ifdef CONFIG_VIDEO_EXYNOS_JPEG	
 	exynos5_jpeg_setup_clock(&s5p_device_jpeg.dev, 150000000);
+#endif
 
 	platform_add_devices(media_devices, ARRAY_SIZE(media_devices));
 }

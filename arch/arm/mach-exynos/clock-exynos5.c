@@ -1052,6 +1052,7 @@ static struct clk exynos5_init_clocks_off[] = {
 		.devname	= "mali.0",
 		.enable		= exynos5_clk_ip_g3d_ctrl,
 		.ctrlbit	= ((1 << 1) | (1 << 0)),
+#ifndef CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED
 	}, {
 		.name		= "isp0",
 		.devname	= FIMC_IS_MODULE_NAME,
@@ -1062,6 +1063,7 @@ static struct clk exynos5_init_clocks_off[] = {
 		.devname	= FIMC_IS_MODULE_NAME,
 		.enable		= exynos5_clk_ip_isp1_ctrl,
 		.ctrlbit	= (0x3F07 << 0),
+#endif
 	},{
 		.name		= "hdmi",
 		.devname	= "exynos5-hdmi",

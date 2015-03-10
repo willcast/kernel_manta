@@ -107,7 +107,7 @@ static struct resource exynos_bts_g3dacp_resource[] = {
 	},
 };
 
-#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS)
+#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS) && !defined(CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED)
 static struct resource exynos_bts_isp0_resource[] = {
 	[0] = {
 		.start  = EXYNOS5_PA_BTS_FIMC_ISP,
@@ -217,7 +217,7 @@ EXYNOS_BTS_PDATA(gscl2, BTS_PRIOR_BE, "pd-gscl", "gscl", 0, 0, BTS_ON_OFF);
 EXYNOS_BTS_PDATA(gscl3, BTS_PRIOR_BE, "pd-gscl", "gscl", 0, 0, BTS_ON_OFF);
 EXYNOS_BTS_PDATA(mfc, BTS_PRIOR_BE, "pd-mfc", "mfc", 0, 0, BTS_NO_ACTION);
 EXYNOS_BTS_PDATA(g3dacp, BTS_PRIOR_BE, "pd-g3d", "g3d", 1, 0, BTS_NO_ACTION);
-#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS)
+#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS) && !defined(CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED)
 EXYNOS_BTS_PDATA(isp0, BTS_PRIOR_BE, "pd-isp", "isp0", 0, 0, BTS_CHANGE_OTHER_DEBLOCK);
 EXYNOS_BTS_PDATA(isp1, BTS_PRIOR_BE, "pd-isp", "isp1", 0, 0, BTS_CHANGE_OTHER_DEBLOCK);
 #endif
@@ -241,12 +241,14 @@ EXYNOS_BTS_DEVICE(disp, &s5p_device_fimd1.dev, "disp-bts");
 EXYNOS_BTS_DEVICE(mixer, &s5p_device_mixer.dev, "mixer-bts");
 EXYNOS_BTS_DEVICE(g3dacp, &exynos5_device_g3d.dev, "g3dacp-bts");
 EXYNOS_BTS_DEVICE(jpeg, NULL, "jpeg-bts");
+#ifdef CONFIG_VIDEO_EXYNOS_GSCALER
 EXYNOS_BTS_DEVICE(gscl0, &exynos5_device_gsc0.dev, "gscl0-bts");
 EXYNOS_BTS_DEVICE(gscl1, &exynos5_device_gsc1.dev, "gscl1-bts");
 EXYNOS_BTS_DEVICE(gscl2, &exynos5_device_gsc2.dev, "gscl2-bts");
 EXYNOS_BTS_DEVICE(gscl3, &exynos5_device_gsc3.dev, "gscl3-bts");
+#endif
 EXYNOS_BTS_DEVICE(mfc, &s5p_device_mfc.dev, "mfc-bts");
-#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS)
+#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS) && !defined(CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED)
 EXYNOS_BTS_DEVICE(isp0, &exynos5_device_fimc_is.dev, "isp0-bts");
 EXYNOS_BTS_DEVICE(isp1, &exynos5_device_fimc_is.dev, "isp1-bts");
 #endif
@@ -260,12 +262,14 @@ static struct platform_device *exynos_bts[] __initdata = {
 	&exynos_device_bts_fbm_ddr_r1,
 	&exynos_device_bts_g3dacp,
 	&exynos_device_bts_jpeg,
+#ifdef CONFIG_VIDEO_EXYNOS_GSCALER
 	&exynos_device_bts_gscl0,
 	&exynos_device_bts_gscl1,
 	&exynos_device_bts_gscl2,
 	&exynos_device_bts_gscl3,
+#endif
 	&exynos_device_bts_mfc,
-#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS)
+#if defined(CONFIG_EXYNOS4_DEV_FIMC_IS) && !defined(CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED)
 	&exynos_device_bts_isp0,
 	&exynos_device_bts_isp1,
 #endif

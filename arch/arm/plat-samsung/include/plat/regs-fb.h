@@ -289,6 +289,28 @@
 #define VIDOSDxB_BOTRIGHT_Y_LIMIT		(0x7ff)
 #define VIDOSDxB_BOTRIGHT_Y(_x)			(((_x) & 0x7ff) << 0)
 
+/* For VIDOSD[1..4]C */
+#define VIDISD14C_ALPHA0_R(_x)			((_x) << 20)
+#define VIDISD14C_ALPHA0_G_MASK			(0xf << 16)
+#define VIDISD14C_ALPHA0_G_SHIFT		16
+#define VIDISD14C_ALPHA0_G_LIMIT		0xf
+#define VIDISD14C_ALPHA0_G(_x)			((_x) << 16)
+#define VIDISD14C_ALPHA0_B_MASK			(0xf << 12)
+#define VIDISD14C_ALPHA0_B_SHIFT		12
+#define VIDISD14C_ALPHA0_B_LIMIT		0xf
+#define VIDISD14C_ALPHA0_B(_x)			((_x) << 12)
+#define VIDISD14C_ALPHA1_R_MASK			(0xf << 8)
+#define VIDISD14C_ALPHA1_R_SHIFT		8
+#define VIDISD14C_ALPHA1_R_LIMIT		0xf
+#define VIDISD14C_ALPHA1_R(_x)			((_x) << 8)
+#define VIDISD14C_ALPHA1_G_MASK			(0xf << 4)
+#define VIDISD14C_ALPHA1_G_SHIFT		4
+#define VIDISD14C_ALPHA1_G_LIMIT		0xf
+#define VIDISD14C_ALPHA1_G(_x)			((_x) << 4)
+#define VIDISD14C_ALPHA1_B_MASK			(0xf << 0)
+#define VIDISD14C_ALPHA1_B_SHIFT		0
+#define VIDISD14C_ALPHA1_B_LIMIT		0xf
+#define VIDISD14C_ALPHA1_B(_x)			((_x) << 0)
 /* alpha when !win->variant.has_osd_alpha */
 #define VIDWxALPHAx_R(_x)			(((_x) & 0xFF) << 16)
 #define VIDWxALPHAx_G(_x)			(((_x) & 0xFF) << 8)

@@ -252,7 +252,9 @@ static void manta_gpio_pull_up(bool pull_up)
 
 static struct platform_device *camera_devices[] __initdata = {
 	&s3c64xx_device_spi1,
+#ifndef CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED
 	&exynos5_device_fimc_is,
+#endif
 };
 
 static void __init manta_camera_sysmmu_init(void)
@@ -264,6 +266,7 @@ static void __init manta_camera_sysmmu_init(void)
 
 void __init exynos5_manta_camera_init(void)
 {
+#ifndef CONFIG_VIDEO_EXYNOS5_FIMC_IS_DISABLED
 	manta_camera_sysmmu_init();
 	platform_add_devices(camera_devices, ARRAY_SIZE(camera_devices));
 
@@ -307,5 +310,6 @@ void __init exynos5_manta_camera_init(void)
 #endif
 
 	exynos5_fimc_is_set_platdata(&exynos5_fimc_is_data);
+#endif
 }
 

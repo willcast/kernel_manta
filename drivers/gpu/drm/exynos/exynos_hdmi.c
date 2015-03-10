@@ -2382,7 +2382,7 @@ struct platform_driver hdmi_driver = {
 	.probe		= hdmi_probe,
 	.remove		= __devexit_p(hdmi_remove),
 	.driver		= {
-		.name	= "exynos4-hdmi",
+		.name	= "exynos5-hdmi",
 		.owner	= THIS_MODULE,
 		.pm = &hdmi_pm_ops,
 	},

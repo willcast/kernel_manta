@@ -1015,7 +1015,7 @@ struct platform_driver fimd_driver = {
 	.probe		= fimd_probe,
 	.remove		= __devexit_p(fimd_remove),
 	.driver		= {
-		.name	= "exynos4-fb",
+		.name	= "exynos5-fb",
 		.owner	= THIS_MODULE,
 		.pm	= &fimd_pm_ops,
 	},
