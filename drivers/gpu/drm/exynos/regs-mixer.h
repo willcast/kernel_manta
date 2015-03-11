@@ -44,6 +44,7 @@
 #define MXR_CM_COEFF_Y			0x0080
 #define MXR_CM_COEFF_CB			0x0084
 #define MXR_CM_COEFF_CR			0x0088
+#define MXR_TVOUT_CFG			0x0100
 #define MXR_GRAPHIC0_BASE_S		0x2024
 #define MXR_GRAPHIC1_BASE_S		0x2044
 
@@ -136,6 +137,12 @@
 #define MXR_LAYER_CFG_GRP1_VAL(x)	MXR_MASK_VAL(x, 11, 8)
 #define MXR_LAYER_CFG_GRP0_VAL(x)	MXR_MASK_VAL(x, 7, 4)
 #define MXR_LAYER_CFG_VP_VAL(x)		MXR_MASK_VAL(x, 3, 0)
+
+/* Adding reset and Layer update registers Exynos5 */
+#define MXR_CFG_LAYER_UPDATE            (1 << 31)
+#define MXR_CFG_LAYER_UPDATE_COUNT0	29
+#define MXR_CFG_LAYER_UPDATE_COUNT_MASK	((1 << 29) | (1 << 30))
+#define MXR_STATUS_SOFT_RESET           (1 << 8)
 
 #endif /* SAMSUNG_REGS_MIXER_H */
 

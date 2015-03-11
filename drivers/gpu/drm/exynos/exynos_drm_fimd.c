@@ -101,7 +101,7 @@ static struct exynos_drm_panel_info manta_drm_panel_info = {
         .timing = {
 	        .name = "Default",
 	        .xres = 2560,
-        	.yres = 160,
+        	.yres = 1600,
 	        .left_margin    = 80,
         	.right_margin   = 48,
 	        .upper_margin   = 37,
@@ -178,7 +178,6 @@ static void fimd_dpms(struct device *subdrv_dev, int mode)
 		if (ctx->suspended)
 			pm_runtime_get_sync(subdrv_dev);
 
-		manta_lcd_on();
 		manta_backlight_on();
 
 		break;
@@ -189,7 +188,6 @@ static void fimd_dpms(struct device *subdrv_dev, int mode)
 		if (!ctx->suspended)
 			pm_runtime_put_sync(subdrv_dev);
 
-		manta_lcd_off();
 		manta_backlight_off();
 
 		break;

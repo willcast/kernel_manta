@@ -399,6 +399,36 @@ struct edid *drm_get_edid(struct drm_connector *connector,
 }
 EXPORT_SYMBOL(drm_get_edid);
 
+/**
+ * drm_mode_equal_no_clocks_no_stereo - test modes for equality
+ * @mode1: first mode
+ * @mode2: second mode
+ *
+ * Check to see if @mode1 and @mode2 are equivalent, but
+ * don't check the pixel clocks nor the stereo layout.
+ *
+ * Returns:
+ * True if the modes are equal, false otherwise.
+ */
+bool drm_mode_equal_no_clocks_no_stereo(const struct drm_display_mode *mode1,
+                                        const struct drm_display_mode *mode2)
+{
+        if (mode1->hdisplay == mode2->hdisplay &&
+            mode1->hsync_start == mode2->hsync_start &&
+            mode1->hsync_end == mode2->hsync_end &&
+            mode1->htotal == mode2->htotal &&
+            mode1->hskew == mode2->hskew &&
+            mode1->vdisplay == mode2->vdisplay &&
+            mode1->vsync_start == mode2->vsync_start &&
+            mode1->vsync_end == mode2->vsync_end &&
+            mode1->vtotal == mode2->vtotal &&
+            mode1->vscan == mode2->vscan)
+                return true;
+
+        return false;
+}
+EXPORT_SYMBOL(drm_mode_equal_no_clocks_no_stereo);
+
 /*** EDID parsing ***/
 
 /**
@@ -1353,6 +1383,62 @@ u8 *drm_find_cea_extension(struct edid *edid)
 	return edid_ext;
 }
 EXPORT_SYMBOL(drm_find_cea_extension);
+
+/*
+ * Calculate the alternate clock for the CEA mode
+ * (60Hz vs. 59.94Hz etc.)
+ */
+static unsigned int
+cea_mode_alternate_clock(const struct drm_display_mode *cea_mode)
+{
+        unsigned int clock = cea_mode->clock;
+
+        if (cea_mode->vrefresh % 6 != 0)
+                return clock;
+
+        /*
+         * edid_cea_modes contains the 59.94Hz
+         * variant for 240 and 480 line modes,
+         * and the 60Hz variant otherwise.
+         */
+        if (cea_mode->vdisplay == 240 || cea_mode->vdisplay == 480)
+                clock = clock * 1001 / 1000;
+        else
+                clock = DIV_ROUND_UP(clock * 1000, 1001);
+
+        return clock;
+}
+
+/**
+ * drm_match_cea_mode - look for a CEA mode matching given mode
+ * @to_match: display mode
+ *
+ * Return: The CEA Video ID (VIC) of the mode or 0 if it isn't a CEA-861
+ * mode.
+ */
+u8 drm_match_cea_mode(const struct drm_display_mode *to_match)
+{
+        u8 mode;
+
+        if (!to_match->clock)
+                return 0;
+
+        for (mode = 0; mode < ARRAY_SIZE(edid_cea_modes); mode++) {
+                const struct drm_display_mode *cea_mode = &edid_cea_modes[mode];
+                unsigned int clock1, clock2;
+
+                /* Check both 60Hz and 59.94Hz */
+                clock1 = cea_mode->clock;
+                clock2 = cea_mode_alternate_clock(cea_mode);
+
+                if ((KHZ2PICOS(to_match->clock) == KHZ2PICOS(clock1) ||
+                     KHZ2PICOS(to_match->clock) == KHZ2PICOS(clock2)) &&
+                    drm_mode_equal_no_clocks_no_stereo(to_match, cea_mode))
+                        return mode + 1;
+        }
+        return 0;
+}
+EXPORT_SYMBOL(drm_match_cea_mode);
 
 static int
 do_cea_modes (struct drm_connector *connector, u8 *db, u8 len)

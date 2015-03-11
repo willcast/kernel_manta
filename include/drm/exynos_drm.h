@@ -137,6 +137,11 @@ struct exynos_drm_panel_info {
 	u32 height_mm;
 };
 
+enum disp_panel_type {
+	MIPI_LCD,
+	DP_LCD
+};
+
 /**
  * Platform Specific Structure for DRM based FIMD.
  *
@@ -145,11 +150,13 @@ struct exynos_drm_panel_info {
  * @bpp: default bit per pixel.
  */
 struct exynos_drm_fimd_pdata {
-	struct exynos_drm_panel_info panel;
+	struct exynos_drm_panel_info	panel;
 	u32				vidcon0;
 	u32				vidcon1;
 	unsigned int			default_win;
 	unsigned int			bpp;
+	unsigned int			clock_rate;
+	enum disp_panel_type		panel_type;
 };
 
 /**
@@ -179,6 +186,7 @@ struct exynos_drm_hdmi_pdata {
 	unsigned int			default_win;
 	unsigned int			bpp;
 	unsigned int			is_v13:1;
+	unsigned int			is_soc_exynos5:1;
 };
 
 #endif	/* __KERNEL__ */

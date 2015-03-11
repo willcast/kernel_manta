@@ -46,6 +46,8 @@
 #define DRIVER_MAJOR	1
 #define DRIVER_MINOR	0
 
+extern struct platform_driver dp_driver;
+
 #define VBLANK_OFF_DELAY	50000
 
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
@@ -300,6 +302,15 @@ static int __init exynos_drm_init(void)
 	}
 #endif
 
+#ifdef CONFIG_DRM_EXYNOS_DP
+	ret = platform_driver_register(&dp_driver);
+	if (ret < 0)
+	{
+		DRM_ERROR("Failed to register dp\n");
+		goto out_dp;
+	}
+#endif
+
 #ifdef CONFIG_DRM_EXYNOS_HDMI
 	ret = platform_driver_register(&hdmi_driver);
 	if (ret < 0)
@@ -329,7 +340,6 @@ static int __init exynos_drm_init(void)
 		goto out_vidi;
 	}
 #endif
-	DRM_DEBUG_DRIVER("About to register toplevel\n");
 	ret = platform_driver_register(&exynos_drm_platform_driver);
 	if (ret < 0) {
 		DRM_ERROR("Failed to register driver\n");
@@ -350,6 +360,11 @@ out_common_hdmi:
 out_mixer:
 	platform_driver_unregister(&hdmi_driver);
 out_hdmi:
+#endif
+
+#ifdef CONFIG_DRM_EXYNOS_DP
+	platform_driver_unregister(&dp_driver);
+out_dp:
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_FIMD

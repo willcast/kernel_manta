@@ -240,11 +240,13 @@ static struct platform_device exynos_device_drm_hdmi = {
 	.name = "exynos-drm-hdmi",
 	.dev = {
 		.platform_data = &exynos_device_drm_hdmi_platdata,
-	}
+	},
+	.id = 3,
 };
 
 static struct platform_device exynos_device_drm = {
 	.name = "exynos-drm",
+	.id = 4,
 };
 
 static struct platform_device *manta_display_devices[] __initdata = {

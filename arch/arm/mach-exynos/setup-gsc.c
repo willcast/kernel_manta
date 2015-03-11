@@ -1,4 +1,4 @@
-/ linux/arch/arm/mach-exynos/setup-gsc.c
+/* linux/arch/arm/mach-exynos/setup-gsc.c
  *
  * Copyright (c) 2011 Samsung Electronics Co., Ltd.
  *             http://www.samsung.com
