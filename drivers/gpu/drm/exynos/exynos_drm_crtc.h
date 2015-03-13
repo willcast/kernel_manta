@@ -29,11 +29,17 @@
 #ifndef _EXYNOS_DRM_CRTC_H_
 #define _EXYNOS_DRM_CRTC_H_
 
+#include "drmP.h"
+#include "drm.h"
+#include "drm_crtc.h"
+
 struct exynos_drm_overlay *get_exynos_drm_overlay(struct drm_device *dev,
 		struct drm_crtc *crtc);
 int exynos_drm_crtc_create(struct drm_device *dev, unsigned int nr);
 int exynos_drm_crtc_enable_vblank(struct drm_device *dev, int crtc);
 void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc);
+
+void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx);
 
 /*
  * Exynos specific crtc postion structure.
@@ -41,6 +47,10 @@ void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc);
  * @fb_x: offset x on a framebuffer to be displyed
  *	- the unit is screen coordinates.
  * @fb_y: offset y on a framebuffer to be displayed
+ *	- the unit is screen coordinates.
+ * @fb_w: width of a framebuffer to be displayed
+ *	- the unit is screen coordinates.
+ * @fb_h: height of a framebuffer to be displayed
  *	- the unit is screen coordinates.
  * @crtc_x: offset x on hardware screen.
  * @crtc_y: offset y on hardware screen.
@@ -50,14 +60,18 @@ void exynos_drm_crtc_disable_vblank(struct drm_device *dev, int crtc);
 struct exynos_drm_crtc_pos {
 	unsigned int fb_x;
 	unsigned int fb_y;
+	unsigned int fb_w;
+	unsigned int fb_h;
 	unsigned int crtc_x;
 	unsigned int crtc_y;
 	unsigned int crtc_w;
 	unsigned int crtc_h;
 };
 
-int exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
+void exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 			      struct drm_framebuffer *fb,
 			      struct drm_display_mode *mode,
 			      struct exynos_drm_crtc_pos *pos);
+
+void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_parameter);
 #endif

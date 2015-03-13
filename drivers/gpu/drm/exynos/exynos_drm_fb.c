@@ -34,30 +34,148 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_fb.h"
 #include "exynos_drm_gem.h"
+#include "exynos_drm_crtc.h"
 
-#define to_exynos_fb(x)	container_of(x, struct exynos_drm_fb, fb)
+/* Helper functions to push things in/out of the iommu. */
+static int exynos_drm_fb_map(struct drm_framebuffer *fb)
+{
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct exynos_drm_gem_obj *gem_ob = exynos_fb->exynos_gem_obj[0];
+	struct drm_gem_object *obj = &gem_ob->base;
+	struct exynos_drm_gem_buf *buf;
+	int ret;
 
-/*
- * exynos specific framebuffer structure.
- *
- * @fb: drm framebuffer obejct.
- * @exynos_gem_obj: array of exynos specific gem object containing a gem object.
- */
-struct exynos_drm_fb {
-	struct drm_framebuffer		fb;
-	struct exynos_drm_gem_obj	*exynos_gem_obj[MAX_FB_BUFFER];
-};
+	buf = exynos_drm_fb_buffer(fb, 0);
+	if (!buf) {
+		DRM_ERROR("buffer is null\n");
+		return -ENOMEM;
+	}
+
+	drm_gem_object_reference(obj);
+
+	ret = dma_map_sg(obj->dev->dev,
+			 buf->sgt->sgl,
+			 buf->sgt->orig_nents,
+			 DMA_BIDIRECTIONAL);
+	if (!ret) {
+		DRM_ERROR("failed to map sg\n");
+		return -ENOMEM;
+	}
+
+	buf->dma_addr = buf->sgt->sgl->dma_address;
+
+	return 0;
+}
+
+static int exynos_drm_fb_unmap(struct drm_framebuffer *fb)
+{
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct exynos_drm_gem_obj *gem_ob = exynos_fb->exynos_gem_obj[0];
+	struct drm_gem_object *obj = &gem_ob->base;
+	struct exynos_drm_gem_buf *buf;
+
+	buf = exynos_drm_fb_buffer(fb, 0);
+	if (!buf) {
+		DRM_ERROR("buffer is null\n");
+		return -ENOMEM;
+	}
+
+	/*
+	 * Not critical, this is used for cleanup in the fb_create error path
+	 * path so keep it silent.
+	 */
+	if (!buf->dma_addr)
+		return -ENOMEM;
+
+	buf->dma_addr = 0;
+
+	/* Unmap the SGT to remove the IOMMU mapping created for this buffer */
+	dma_unmap_sg(obj->dev->dev,
+		     buf->sgt->sgl,
+		     buf->sgt->orig_nents,
+		     DMA_BIDIRECTIONAL);
+
+	drm_gem_object_unreference_unlocked(obj);
+
+	return 0;
+}
+
+void exynos_drm_wait_for_vsync(struct drm_device *drm_dev)
+{
+	struct exynos_drm_private *dev_priv = drm_dev->dev_private;
+
+	atomic_set(&dev_priv->wait_vsync_event, 1);
+
+	/*
+	 * wait for FIMD to signal VSYNC interrupt or return after
+	 * timeout which is set to 50ms (refresh rate of 20)
+	 * Cannot use DRM_WAIT_ON or wait_event_interruptible_timeout
+	 * here since they exit if there is a signal pending. This
+	 * happens when X is killed and DRM release is called which
+	 * makes these functions return without waiting.
+	 */
+	wait_event_timeout(dev_priv->wait_vsync_queue,
+				!atomic_read(&dev_priv->wait_vsync_event),
+				DRM_HZ/20);
+
+	/* TODO: Add wait for vsync for HDMI*/
+}
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+void exynos_drm_kds_callback_rm_fb(void *callback_parameter,
+				   void *callback_extra_parameter)
+{
+	struct drm_framebuffer *fb = callback_parameter;
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+
+	kds_resource_set_release(&exynos_fb->kds_res_set_rm_fb);
+
+	dma_buf_put(exynos_fb->dma_buf);
+
+	if (exynos_drm_fb_unmap(fb))
+		DRM_ERROR("Couldn't unmap buffer\n");
+
+	kfree(exynos_fb);
+}
+#endif
 
 static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 {
 	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct exynos_drm_private *dev_priv = fb->dev->dev_private;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	drm_framebuffer_cleanup(fb);
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (exynos_fb->dma_buf) {
+		struct dma_buf *buf = exynos_fb->dma_buf;
+		unsigned long shared = ~0UL;
+		struct kds_resource *res_list = get_dma_buf_kds_resource(buf);
+
+		/* Waiting for the KDS resource*/
+		kds_async_waitall(&exynos_fb->kds_res_set_rm_fb,
+				  KDS_FLAG_LOCKED_WAIT, &dev_priv->kds_cb_rm_fb,
+				  fb, NULL, 1, &shared, &res_list);
+
+		return;
+	}
+#endif
+
+	/*
+	 * We need to wait for non-kds buffers (i.e. some mode-set cases).
+	 * Otherwise, we risk umapping a buffer that is being scanned-out.
+	 * The wait below is actually incorrect in that it only waits for
+	 * a fimd vblank (so is wrong for hdmi).
+	 * TODO(msb) fix this.
+	 */
+	exynos_drm_wait_for_vsync(fb->dev);
+
+	if (exynos_drm_fb_unmap(fb))
+		DRM_ERROR("Couldn't unmap buffer\n");
+
 	kfree(exynos_fb);
-	exynos_fb = NULL;
 }
 
 static int exynos_drm_fb_create_handle(struct drm_framebuffer *fb,
@@ -155,6 +273,12 @@ exynos_user_fb_create(struct drm_device *dev, struct drm_file *file_priv,
 		drm_gem_object_unreference_unlocked(obj);
 
 		exynos_fb->exynos_gem_obj[i] = to_exynos_gem_obj(obj);
+	}
+
+	if (exynos_drm_fb_map(fb)) {
+		DRM_ERROR("Failed to map gem object\n");
+		exynos_drm_fb_destroy(fb);
+		return ERR_PTR(-ENOMEM);
 	}
 
 	return fb;

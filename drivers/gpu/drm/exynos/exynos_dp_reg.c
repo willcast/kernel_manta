@@ -269,9 +269,19 @@ void exynos_dp_init_analog_func(struct exynos_dp_device *dp)
 	reg &= ~(F_PLL_LOCK | PLL_LOCK_CTRL);
 	writel(reg, dp->reg_base + EXYNOS_DP_DEBUG_CTL);
 
-        /* Power up PLL */
-        if (exynos_dp_get_pll_lock_status(dp) == PLL_UNLOCKED)
-                exynos_dp_set_pll_power_down(dp, 0);
+	/* Power up PLL */
+	if (exynos_dp_get_pll_lock_status(dp) == PLL_UNLOCKED) {
+		exynos_dp_set_pll_power_down(dp, 0);
+
+		while (exynos_dp_get_pll_lock_status(dp) == PLL_UNLOCKED) {
+			timeout_loop++;
+			if (DP_TIMEOUT_LOOP_COUNT < timeout_loop) {
+				dev_err(dp->dev, "failed to get pll lock status\n");
+				return;
+			}
+			udelay(10);
+		}
+	}
 
 	/* Enable Serdes FIFO function and Link symbol clock domain module */
 	reg = readl(dp->reg_base + EXYNOS_DP_FUNC_EN_2);
@@ -529,7 +539,7 @@ int exynos_dp_read_byte_from_dpcd(struct exynos_dp_device *dp,
 		if (retval == 0)
 			break;
 		else
-			dev_err(dp->dev, "%s: Aux Transaction fail!\n",
+			dev_dbg(dp->dev, "%s: Aux Transaction fail!\n",
 				__func__);
 	}
 

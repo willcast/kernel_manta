@@ -31,9 +31,13 @@
 #include "exynos_drm_encoder.h"
 #include "exynos_drm_connector.h"
 #include "exynos_drm_fbdev.h"
+#include "exynos_drm_display.h"
 
 static LIST_HEAD(exynos_drm_subdrv_list);
 static struct drm_device *drm_dev;
+#ifdef CONFIG_EXYNOS_IOMMU
+struct dma_iommu_mapping *exynos_drm_common_mapping;
+#endif
 
 static int exynos_drm_subdrv_probe(struct drm_device *dev,
 					struct exynos_drm_subdrv *subdrv)
@@ -54,18 +58,16 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 		 *
 		 * P.S. note that this driver is considered for modularization.
 		 */
-		ret = subdrv->probe(dev, subdrv->dev);
+		ret = subdrv->probe(dev, subdrv);
 		if (ret)
 			return ret;
 	}
 
-	if (!subdrv->manager)
+	if (!subdrv->display)
 		return 0;
 
-	subdrv->manager->dev = subdrv->dev;
-
 	/* create and initialize a encoder for this sub driver. */
-	encoder = exynos_drm_encoder_create(dev, subdrv->manager,
+	encoder = exynos_drm_encoder_create(dev, subdrv->display,
 			(1 << MAX_CRTC) - 1);
 	if (!encoder) {
 		DRM_ERROR("failed to create encoder\n");
@@ -133,7 +135,6 @@ int exynos_drm_device_register(struct drm_device *dev)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(exynos_drm_device_register);
 
 int exynos_drm_device_unregister(struct drm_device *dev)
 {
@@ -153,7 +154,6 @@ int exynos_drm_device_unregister(struct drm_device *dev)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(exynos_drm_device_unregister);
 
 int exynos_drm_subdrv_register(struct exynos_drm_subdrv *subdrv)
 {
@@ -166,7 +166,6 @@ int exynos_drm_subdrv_register(struct exynos_drm_subdrv *subdrv)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(exynos_drm_subdrv_register);
 
 int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *subdrv)
 {
@@ -179,7 +178,6 @@ int exynos_drm_subdrv_unregister(struct exynos_drm_subdrv *subdrv)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(exynos_drm_subdrv_unregister);
 
 int exynos_drm_subdrv_open(struct drm_device *dev, struct drm_file *file)
 {
@@ -203,7 +201,6 @@ err:
 	}
 	return ret;
 }
-EXPORT_SYMBOL_GPL(exynos_drm_subdrv_open);
 
 void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file)
 {
@@ -214,4 +211,3 @@ void exynos_drm_subdrv_close(struct drm_device *dev, struct drm_file *file)
 			subdrv->close(dev, subdrv->dev, file);
 	}
 }
-EXPORT_SYMBOL_GPL(exynos_drm_subdrv_close);

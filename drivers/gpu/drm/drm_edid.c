@@ -66,8 +66,6 @@
 #define EDID_QUIRK_FIRST_DETAILED_PREFERRED	(1 << 5)
 /* use +hsync +vsync for detailed mode */
 #define EDID_QUIRK_DETAILED_SYNC_PP		(1 << 6)
-/* Force reduced-blanking timings for detailed modes */
-#define EDID_QUIRK_FORCE_REDUCED_BLANKING	(1 << 7)
 
 struct detailed_mode_closure {
 	struct drm_connector *connector;
@@ -122,9 +120,6 @@ static struct edid_quirk {
 	/* Samsung SyncMaster 22[5-6]BW */
 	{ "SAM", 596, EDID_QUIRK_PREFER_LARGE_60 },
 	{ "SAM", 638, EDID_QUIRK_PREFER_LARGE_60 },
-
-	/* ViewSonic VA2026w */
-	{ "VSC", 5020, EDID_QUIRK_FORCE_REDUCED_BLANKING },
 };
 
 /*** DDC fetch and block validation ***/
@@ -247,6 +242,8 @@ drm_do_probe_ddc_edid(struct i2c_adapter *adapter, unsigned char *buf,
 		      int block, int len)
 {
 	unsigned char start = block * EDID_LENGTH;
+	unsigned char segment = block >> 1;
+	unsigned char xfers = segment ? 3 : 2;
 	int ret, retries = 5;
 
 	/* The core i2c driver will automatically retry the transfer if the
@@ -258,6 +255,11 @@ drm_do_probe_ddc_edid(struct i2c_adapter *adapter, unsigned char *buf,
 	do {
 		struct i2c_msg msgs[] = {
 			{
+				.addr	= DDC_SEGMENT_ADDR,
+				.flags	= 0,
+				.len	= 1,
+				.buf	= &segment,
+			}, {
 				.addr	= DDC_ADDR,
 				.flags	= 0,
 				.len	= 1,
@@ -269,15 +271,21 @@ drm_do_probe_ddc_edid(struct i2c_adapter *adapter, unsigned char *buf,
 				.buf	= buf,
 			}
 		};
-		ret = i2c_transfer(adapter, msgs, 2);
+
+	/*
+	 * Avoid sending the segment addr to not upset non-compliant ddc
+	 * monitors.
+	 */
+		ret = i2c_transfer(adapter, &msgs[3 - xfers], xfers);
+
 		if (ret == -ENXIO) {
 			DRM_DEBUG_KMS("drm: skipping non-existent adapter %s\n",
 					adapter->name);
 			break;
 		}
-	} while (ret != 2 && --retries);
+	} while (ret != xfers && --retries);
 
-	return ret == 2 ? 0 : -1;
+	return ret == xfers ? 0 : -1;
 }
 
 static bool drm_edid_is_zero(u8 *in_edid, int length)
@@ -398,36 +406,6 @@ struct edid *drm_get_edid(struct drm_connector *connector,
 
 }
 EXPORT_SYMBOL(drm_get_edid);
-
-/**
- * drm_mode_equal_no_clocks_no_stereo - test modes for equality
- * @mode1: first mode
- * @mode2: second mode
- *
- * Check to see if @mode1 and @mode2 are equivalent, but
- * don't check the pixel clocks nor the stereo layout.
- *
- * Returns:
- * True if the modes are equal, false otherwise.
- */
-bool drm_mode_equal_no_clocks_no_stereo(const struct drm_display_mode *mode1,
-                                        const struct drm_display_mode *mode2)
-{
-        if (mode1->hdisplay == mode2->hdisplay &&
-            mode1->hsync_start == mode2->hsync_start &&
-            mode1->hsync_end == mode2->hsync_end &&
-            mode1->htotal == mode2->htotal &&
-            mode1->hskew == mode2->hskew &&
-            mode1->vdisplay == mode2->vdisplay &&
-            mode1->vsync_start == mode2->vsync_start &&
-            mode1->vsync_end == mode2->vsync_end &&
-            mode1->vtotal == mode2->vtotal &&
-            mode1->vscan == mode2->vscan)
-                return true;
-
-        return false;
-}
-EXPORT_SYMBOL(drm_mode_equal_no_clocks_no_stereo);
 
 /*** EDID parsing ***/
 
@@ -609,7 +587,7 @@ static bool
 drm_monitor_supports_rb(struct edid *edid)
 {
 	if (edid->revision >= 4) {
-		bool ret = false;
+		bool ret;
 		drm_for_each_detailed_block((u8 *)edid, is_rb, &ret);
 		return ret;
 	}
@@ -866,7 +844,7 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_device *dev,
 	unsigned vblank = (pt->vactive_vblank_hi & 0xf) << 8 | pt->vblank_lo;
 	unsigned hsync_offset = (pt->hsync_vsync_offset_pulse_width_hi & 0xc0) << 2 | pt->hsync_offset_lo;
 	unsigned hsync_pulse_width = (pt->hsync_vsync_offset_pulse_width_hi & 0x30) << 4 | pt->hsync_pulse_width_lo;
-	unsigned vsync_offset = (pt->hsync_vsync_offset_pulse_width_hi & 0xc) << 2 | pt->vsync_offset_pulse_width_lo >> 4;
+	unsigned vsync_offset = (pt->hsync_vsync_offset_pulse_width_hi & 0xc) >> 2 | pt->vsync_offset_pulse_width_lo >> 4;
 	unsigned vsync_pulse_width = (pt->hsync_vsync_offset_pulse_width_hi & 0x3) << 4 | (pt->vsync_offset_pulse_width_lo & 0xf);
 
 	/* ignore tiny modes */
@@ -887,18 +865,11 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_device *dev,
 				"Wrong Hsync/Vsync pulse width\n");
 		return NULL;
 	}
-
-	if (quirks & EDID_QUIRK_FORCE_REDUCED_BLANKING) {
-		mode = drm_cvt_mode(dev, hactive, vactive, 60, true, false, false);
-		if (!mode)
-			return NULL;
-
-		goto set_size;
-	}
-
 	mode = drm_mode_create(dev);
 	if (!mode)
 		return NULL;
+
+	mode->type = DRM_MODE_TYPE_DRIVER;
 
 	if (quirks & EDID_QUIRK_135_CLOCK_TOO_HIGH)
 		timing->pixel_clock = cpu_to_le16(1088);
@@ -923,6 +894,8 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_device *dev,
 
 	drm_mode_do_interlace_quirk(mode, pt);
 
+	drm_mode_set_name(mode);
+
 	if (quirks & EDID_QUIRK_DETAILED_SYNC_PP) {
 		pt->misc |= DRM_EDID_PT_HSYNC_POSITIVE | DRM_EDID_PT_VSYNC_POSITIVE;
 	}
@@ -932,7 +905,6 @@ static struct drm_display_mode *drm_mode_detailed(struct drm_device *dev,
 	mode->flags |= (pt->misc & DRM_EDID_PT_VSYNC_POSITIVE) ?
 		DRM_MODE_FLAG_PVSYNC : DRM_MODE_FLAG_NVSYNC;
 
-set_size:
 	mode->width_mm = pt->width_mm_lo | (pt->width_height_mm_hi & 0xf0) << 4;
 	mode->height_mm = pt->height_mm_lo | (pt->width_height_mm_hi & 0xf) << 8;
 
@@ -945,10 +917,6 @@ set_size:
 		mode->width_mm = edid->width_cm * 10;
 		mode->height_mm = edid->height_cm * 10;
 	}
-
-	mode->type = DRM_MODE_TYPE_DRIVER;
-	mode->vrefresh = drm_mode_vrefresh(mode);
-	drm_mode_set_name(mode);
 
 	return mode;
 }
@@ -1384,62 +1352,6 @@ u8 *drm_find_cea_extension(struct edid *edid)
 }
 EXPORT_SYMBOL(drm_find_cea_extension);
 
-/*
- * Calculate the alternate clock for the CEA mode
- * (60Hz vs. 59.94Hz etc.)
- */
-static unsigned int
-cea_mode_alternate_clock(const struct drm_display_mode *cea_mode)
-{
-        unsigned int clock = cea_mode->clock;
-
-        if (cea_mode->vrefresh % 6 != 0)
-                return clock;
-
-        /*
-         * edid_cea_modes contains the 59.94Hz
-         * variant for 240 and 480 line modes,
-         * and the 60Hz variant otherwise.
-         */
-        if (cea_mode->vdisplay == 240 || cea_mode->vdisplay == 480)
-                clock = clock * 1001 / 1000;
-        else
-                clock = DIV_ROUND_UP(clock * 1000, 1001);
-
-        return clock;
-}
-
-/**
- * drm_match_cea_mode - look for a CEA mode matching given mode
- * @to_match: display mode
- *
- * Return: The CEA Video ID (VIC) of the mode or 0 if it isn't a CEA-861
- * mode.
- */
-u8 drm_match_cea_mode(const struct drm_display_mode *to_match)
-{
-        u8 mode;
-
-        if (!to_match->clock)
-                return 0;
-
-        for (mode = 0; mode < ARRAY_SIZE(edid_cea_modes); mode++) {
-                const struct drm_display_mode *cea_mode = &edid_cea_modes[mode];
-                unsigned int clock1, clock2;
-
-                /* Check both 60Hz and 59.94Hz */
-                clock1 = cea_mode->clock;
-                clock2 = cea_mode_alternate_clock(cea_mode);
-
-                if ((KHZ2PICOS(to_match->clock) == KHZ2PICOS(clock1) ||
-                     KHZ2PICOS(to_match->clock) == KHZ2PICOS(clock2)) &&
-                    drm_mode_equal_no_clocks_no_stereo(to_match, cea_mode))
-                        return mode + 1;
-        }
-        return 0;
-}
-EXPORT_SYMBOL(drm_match_cea_mode);
-
 static int
 do_cea_modes (struct drm_connector *connector, u8 *db, u8 len)
 {
@@ -1856,8 +1768,7 @@ int drm_add_edid_modes(struct drm_connector *connector, struct edid *edid)
 	num_modes += add_cvt_modes(connector, edid);
 	num_modes += add_standard_modes(connector, edid);
 	num_modes += add_established_modes(connector, edid);
-	if (edid->features & DRM_EDID_FEATURE_DEFAULT_GTF)
-		num_modes += add_inferred_modes(connector, edid);
+	num_modes += add_inferred_modes(connector, edid);
 	num_modes += add_cea_modes(connector, edid);
 
 	if (quirks & (EDID_QUIRK_PREFER_LARGE_60 | EDID_QUIRK_PREFER_LARGE_75))

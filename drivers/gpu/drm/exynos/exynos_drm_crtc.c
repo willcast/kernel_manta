@@ -34,31 +34,7 @@
 #include "exynos_drm_fb.h"
 #include "exynos_drm_encoder.h"
 #include "exynos_drm_gem.h"
-
-#define to_exynos_crtc(x)	container_of(x, struct exynos_drm_crtc,\
-				drm_crtc)
-
-/*
- * Exynos specific crtc structure.
- *
- * @drm_crtc: crtc object.
- * @overlay: contain information common to display controller and hdmi and
- *	contents of this overlay object would be copied to sub driver size.
- * @pipe: a crtc index created at load() with a new crtc object creation
- *	and the crtc object would be set to private->crtc array
- *	to get a crtc object corresponding to this pipe from private->crtc
- *	array when irq interrupt occured. the reason of using this pipe is that
- *	drm framework doesn't support multiple irq yet.
- *	we can refer to the crtc to current hardware interrupt occured through
- *	this pipe value.
- * @dpms: store the crtc dpms value
- */
-struct exynos_drm_crtc {
-	struct drm_crtc			drm_crtc;
-	struct exynos_drm_overlay	overlay;
-	unsigned int			pipe;
-	unsigned int			dpms;
-};
+#include "exynos_trace.h"
 
 static void exynos_drm_crtc_apply(struct drm_crtc *crtc)
 {
@@ -71,10 +47,10 @@ static void exynos_drm_crtc_apply(struct drm_crtc *crtc)
 			exynos_drm_encoder_crtc_commit);
 }
 
-int exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
-			      struct drm_framebuffer *fb,
-			      struct drm_display_mode *mode,
-			      struct exynos_drm_crtc_pos *pos)
+void exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
+			       struct drm_framebuffer *fb,
+			       struct drm_display_mode *mode,
+			       struct exynos_drm_crtc_pos *pos)
 {
 	struct exynos_drm_gem_buf *buffer;
 	unsigned int actual_w;
@@ -84,10 +60,6 @@ int exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 
 	for (i = 0; i < nr; i++) {
 		buffer = exynos_drm_fb_buffer(fb, i);
-		if (!buffer) {
-			DRM_LOG_KMS("buffer is null\n");
-			return -EFAULT;
-		}
 
 		overlay->dma_addr[i] = buffer->dma_addr;
 		overlay->vaddr[i] = buffer->kvaddr;
@@ -103,10 +75,10 @@ int exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 	/* set drm framebuffer data. */
 	overlay->fb_x = pos->fb_x;
 	overlay->fb_y = pos->fb_y;
-	overlay->fb_width = fb->width;
-	overlay->fb_height = fb->height;
+	overlay->fb_width = min(pos->fb_w, actual_w);
+	overlay->fb_height = min(pos->fb_h, actual_h);
+	overlay->fb_pitch = fb->pitches[0];
 	overlay->bpp = fb->bits_per_pixel;
-	overlay->pitch = fb->pitches[0];
 	overlay->pixel_format = fb->pixel_format;
 
 	/* set overlay range to be displayed. */
@@ -114,6 +86,10 @@ int exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 	overlay->crtc_y = pos->crtc_y;
 	overlay->crtc_width = actual_w;
 	overlay->crtc_height = actual_h;
+	overlay->crtc_htotal = mode->crtc_htotal;
+	overlay->crtc_hsync_len = mode->hsync_end - mode->hsync_start;
+	overlay->crtc_vtotal = mode->crtc_vtotal;
+	overlay->crtc_vsync_len = mode->vsync_end - mode->vsync_start;
 
 	/* set drm mode data. */
 	overlay->mode_width = mode->hdisplay;
@@ -124,20 +100,15 @@ int exynos_drm_overlay_update(struct exynos_drm_overlay *overlay,
 	DRM_DEBUG_KMS("overlay : offset_x/y(%d,%d), width/height(%d,%d)",
 			overlay->crtc_x, overlay->crtc_y,
 			overlay->crtc_width, overlay->crtc_height);
-
-	return 0;
 }
 
-static int exynos_drm_crtc_update(struct drm_crtc *crtc)
+static void exynos_drm_crtc_update(struct drm_crtc *crtc,
+				   struct drm_framebuffer *fb)
 {
 	struct exynos_drm_crtc *exynos_crtc;
 	struct exynos_drm_overlay *overlay;
 	struct exynos_drm_crtc_pos pos;
 	struct drm_display_mode *mode = &crtc->mode;
-	struct drm_framebuffer *fb = crtc->fb;
-
-	if (!mode || !fb)
-		return -EINVAL;
 
 	exynos_crtc = to_exynos_crtc(crtc);
 	overlay = &exynos_crtc->overlay;
@@ -147,6 +118,8 @@ static int exynos_drm_crtc_update(struct drm_crtc *crtc)
 	/* it means the offset of framebuffer to be displayed. */
 	pos.fb_x = crtc->x;
 	pos.fb_y = crtc->y;
+	pos.fb_w = fb->width;
+	pos.fb_h = fb->height;
 
 	/* OSD position to be displayed. */
 	pos.crtc_x = 0;
@@ -154,7 +127,7 @@ static int exynos_drm_crtc_update(struct drm_crtc *crtc)
 	pos.crtc_w = fb->width - crtc->x;
 	pos.crtc_h = fb->height - crtc->y;
 
-	return exynos_drm_overlay_update(overlay, crtc->fb, mode, &pos);
+	exynos_drm_overlay_update(overlay, fb, mode, &pos);
 }
 
 static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
@@ -192,6 +165,16 @@ static void exynos_drm_crtc_dpms(struct drm_crtc *crtc, int mode)
 	mutex_unlock(&dev->struct_mutex);
 }
 
+static void exynos_drm_crtc_disable(struct drm_crtc *crtc)
+{
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct exynos_drm_overlay *overlay = &exynos_crtc->overlay;
+	int win = overlay->zpos;
+
+	exynos_drm_fn_encoder(crtc, &win,
+		exynos_drm_encoder_crtc_disable);
+}
+
 static void exynos_drm_crtc_prepare(struct drm_crtc *crtc)
 {
 	DRM_DEBUG_KMS("%s\n", __FILE__);
@@ -213,6 +196,12 @@ static void exynos_drm_crtc_commit(struct drm_crtc *crtc)
 	 */
 	if (exynos_crtc->dpms != DRM_MODE_DPMS_ON) {
 		int mode = DRM_MODE_DPMS_ON;
+
+		/*
+		 * TODO(seanpaul): This has the nasty habit of calling the
+		 * underlying dpms/power callbacks twice on boot. This code
+		 * needs to be cleaned up so this doesn't happen.
+		 */
 
 		/*
 		 * enable hardware(power on) to all encoders hdmi connected
@@ -247,7 +236,12 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 			  struct drm_display_mode *adjusted_mode, int x, int y,
 			  struct drm_framebuffer *old_fb)
 {
+	struct drm_framebuffer *fb = crtc->fb;
+
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	if (!fb)
+		return -EINVAL;
 
 	/*
 	 * copy the mode data adjusted by mode_fixup() into crtc->mode
@@ -255,23 +249,25 @@ exynos_drm_crtc_mode_set(struct drm_crtc *crtc, struct drm_display_mode *mode,
 	 */
 	memcpy(&crtc->mode, adjusted_mode, sizeof(*adjusted_mode));
 
-	return exynos_drm_crtc_update(crtc);
+	exynos_drm_crtc_update(crtc, fb);
+
+	return 0;
 }
 
 static int exynos_drm_crtc_mode_set_base(struct drm_crtc *crtc, int x, int y,
 					  struct drm_framebuffer *old_fb)
 {
-	int ret;
+	struct drm_framebuffer *fb = crtc->fb;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
-	ret = exynos_drm_crtc_update(crtc);
-	if (ret)
-		return ret;
+	if (!fb)
+		return -EINVAL;
 
+	exynos_drm_crtc_update(crtc, fb);
 	exynos_drm_crtc_apply(crtc);
 
-	return ret;
+	return 0;
 }
 
 static void exynos_drm_crtc_load_lut(struct drm_crtc *crtc)
@@ -282,6 +278,7 @@ static void exynos_drm_crtc_load_lut(struct drm_crtc *crtc)
 
 static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 	.dpms		= exynos_drm_crtc_dpms,
+	.disable	= exynos_drm_crtc_disable,
 	.prepare	= exynos_drm_crtc_prepare,
 	.commit		= exynos_drm_crtc_commit,
 	.mode_fixup	= exynos_drm_crtc_mode_fixup,
@@ -290,59 +287,196 @@ static struct drm_crtc_helper_funcs exynos_crtc_helper_funcs = {
 	.load_lut	= exynos_drm_crtc_load_lut,
 };
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+void exynos_drm_kds_callback(void *callback_parameter, void *callback_extra_parameter)
+{
+	struct drm_framebuffer *fb = callback_parameter;
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct drm_crtc *crtc =  exynos_fb->crtc;
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct drm_device *dev = crtc->dev;
+	struct kds_resource_set **pkds = callback_extra_parameter;
+	struct kds_resource_set *prev_kds;
+	unsigned long flags;
+
+	exynos_drm_crtc_update(crtc, fb);
+	exynos_drm_crtc_apply(crtc);
+
+	spin_lock_irqsave(&dev->event_lock, flags);
+	prev_kds = exynos_crtc->pending_kds;
+	exynos_crtc->pending_kds = *pkds;
+	*pkds = NULL;
+	if (prev_kds)
+		exynos_crtc->flip_in_flight--;
+	spin_unlock_irqrestore(&dev->event_lock, flags);
+
+	if (prev_kds) {
+		DRM_ERROR("previous work detected\n");
+		kds_resource_set_release(&prev_kds);
+	} else {
+		BUG_ON(atomic_read(&exynos_crtc->flip_pending));
+		atomic_set(&exynos_crtc->flip_pending, 1);
+	}
+}
+#endif
+
+static void exynos_drm_crtc_flip_complete(struct drm_pending_vblank_event *e)
+{
+	struct timeval now;
+
+	do_gettimeofday(&now);
+	e->event.sequence = 0;
+	e->event.tv_sec = now.tv_sec;
+	e->event.tv_usec = now.tv_usec;
+	list_add_tail(&e->base.link, &e->base.file_priv->event_list);
+	wake_up_interruptible(&e->base.file_priv->event_wait);
+	trace_exynos_fake_flip_complete(e->pipe);
+}
+
 static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
-				      struct drm_framebuffer *fb,
-				      struct drm_pending_vblank_event *event)
+				     struct drm_framebuffer *fb,
+				     struct drm_pending_vblank_event *event)
 {
 	struct drm_device *dev = crtc->dev;
 	struct exynos_drm_private *dev_priv = dev->dev_private;
 	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
-	struct drm_framebuffer *old_fb = crtc->fb;
-	int ret = -EINVAL;
-
+	unsigned long flags;
+	int ret;
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	struct exynos_drm_fb *exynos_fb = to_exynos_fb(fb);
+	struct exynos_drm_gem_obj *gem_ob = (struct exynos_drm_gem_obj *)exynos_fb->exynos_gem_obj[0];
+	struct kds_resource_set **pkds;
+	struct drm_pending_vblank_event *event_to_send;
+#endif
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	/*
+	 * the pipe from user always is 0 so we can set pipe number
+	 * of current owner to event.
+	 */
+	if (event)
+		event->pipe = exynos_crtc->pipe;
+
+	ret = drm_vblank_get(dev, exynos_crtc->pipe);
+	if (ret) {
+		DRM_ERROR("Unable to get vblank\n");
+		return -EINVAL;
+	}
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	spin_lock_irqsave(&dev->event_lock, flags);
+	if (exynos_crtc->flip_in_flight > 1) {
+		spin_unlock_irqrestore(&dev->event_lock, flags);
+		DRM_DEBUG_DRIVER("flip queue: crtc already busy\n");
+		ret = -EBUSY;
+		goto fail_max_in_flight;
+	}
+	/* Signal previous flip event. Or if none in flight signal current. */
+	if (exynos_crtc->flip_in_flight) {
+		event_to_send = exynos_crtc->event;
+		exynos_crtc->event = event;
+	} else {
+		event_to_send = event;
+		exynos_crtc->event = NULL;
+	}
+	pkds = &exynos_crtc->future_kds;
+	if (*pkds)
+		pkds = &exynos_crtc->future_kds_extra;
+	*pkds = ERR_PTR(-EINVAL); /* Make it non-NULL */
+	exynos_crtc->flip_in_flight++;
+	spin_unlock_irqrestore(&dev->event_lock, flags);
+#endif
 
 	mutex_lock(&dev->struct_mutex);
 
-	if (event) {
-		/*
-		 * the pipe from user always is 0 so we can set pipe number
-		 * of current owner to event.
-		 */
-		event->pipe = exynos_crtc->pipe;
+	crtc->fb = fb;
 
-		ret = drm_vblank_get(dev, exynos_crtc->pipe);
-		if (ret) {
-			DRM_DEBUG("failed to acquire vblank counter\n");
-			list_del(&event->base.link);
-
-			goto out;
-		}
-
-		list_add_tail(&event->base.link,
-				&dev_priv->pageflip_event_list);
-
-		crtc->fb = fb;
-		ret = exynos_drm_crtc_update(crtc);
-		if (ret) {
-			crtc->fb = old_fb;
-			drm_vblank_put(dev, exynos_crtc->pipe);
-			list_del(&event->base.link);
-
-			goto out;
-		}
-
-		/*
-		 * the values related to a buffer of the drm framebuffer
-		 * to be applied should be set at here. because these values
-		 * first, are set to shadow registers and then to
-		 * real registers at vsync front porch period.
-		 */
-		exynos_drm_crtc_apply(crtc);
-	}
-out:
 	mutex_unlock(&dev->struct_mutex);
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	exynos_fb->crtc = crtc;
+	if (gem_ob->base.export_dma_buf) {
+		struct dma_buf *buf = gem_ob->base.export_dma_buf;
+		unsigned long shared = 0UL;
+		struct kds_resource *res_list = get_dma_buf_kds_resource(buf);
+
+		/*
+		 * If we don't already have a reference to the dma_buf,
+		 * grab one now. We'll release it in exynos_drm_fb_destory().
+		 */
+		if (!exynos_fb->dma_buf) {
+			get_dma_buf(buf);
+			exynos_fb->dma_buf = buf;
+		}
+		BUG_ON(exynos_fb->dma_buf !=  buf);
+
+		/* Waiting for the KDS resource*/
+		ret = kds_async_waitall(pkds, KDS_FLAG_LOCKED_WAIT,
+					&dev_priv->kds_cb, fb, pkds, 1,
+					&shared, &res_list);
+		if (ret) {
+			DRM_ERROR("kds_async_waitall failed: %d\n", ret);
+			goto fail_kds;
+		}
+	} else {
+		*pkds = NULL;
+		DRM_ERROR("flipping a non-kds buffer\n");
+		exynos_drm_kds_callback(fb, pkds);
+	}
+
+	if (event_to_send) {
+		spin_lock_irqsave(&dev->event_lock, flags);
+		exynos_drm_crtc_flip_complete(event_to_send);
+		spin_unlock_irqrestore(&dev->event_lock, flags);
+	}
+#endif
+
+	trace_exynos_flip_request(exynos_crtc->pipe);
+
+	return 0;
+
+fail_kds:
+	*pkds = NULL;
+	spin_lock_irqsave(&dev->event_lock, flags);
+	exynos_crtc->flip_in_flight--;
+	spin_unlock_irqrestore(&dev->event_lock, flags);
+fail_max_in_flight:
+	drm_vblank_put(dev, exynos_crtc->pipe);
 	return ret;
+}
+
+void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
+{
+	struct exynos_drm_private *dev_priv = drm_dev->dev_private;
+	struct drm_crtc *crtc = dev_priv->crtc[crtc_idx];
+	struct exynos_drm_crtc *exynos_crtc = to_exynos_crtc(crtc);
+	struct kds_resource_set *kds;
+	unsigned long flags;
+
+	/* set wait vsync event to zero and wake up queue. */
+	atomic_set(&dev_priv->wait_vsync_event, 0);
+	DRM_WAKEUP(&dev_priv->wait_vsync_queue);
+
+	if (!atomic_cmpxchg(&exynos_crtc->flip_pending, 1, 0))
+		return;
+
+	trace_exynos_flip_complete(crtc_idx);
+
+	spin_lock_irqsave(&drm_dev->event_lock, flags);
+	if (exynos_crtc->event) {
+		exynos_drm_crtc_flip_complete(exynos_crtc->event);
+		exynos_crtc->event = NULL;
+	}
+	kds = exynos_crtc->current_kds;
+	exynos_crtc->current_kds = exynos_crtc->pending_kds;
+	exynos_crtc->pending_kds = NULL;
+	exynos_crtc->flip_in_flight--;
+	spin_unlock_irqrestore(&drm_dev->event_lock, flags);
+
+	if (kds)
+		kds_resource_set_release(&kds);
+
+	drm_vblank_put(drm_dev, crtc_idx);
 }
 
 static void exynos_drm_crtc_destroy(struct drm_crtc *crtc)

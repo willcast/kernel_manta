@@ -39,9 +39,6 @@
 
 #define PLL_MAX_TRIES 100
 
-extern void manta_lcd_on(void);
-extern void manta_lcd_off(void);
-
 static int exynos_dp_init_dp(struct exynos_dp_device *dp)
 {
 	exynos_dp_reset(dp);
@@ -102,9 +99,11 @@ static int exynos_dp_read_edid(struct exynos_dp_device *dp)
 	 */
 
 	/* Read Extension Flag, Number of 128-byte EDID extension blocks */
-	exynos_dp_read_byte_from_i2c(dp, I2C_EDID_DEVICE_ADDR,
+	retval = exynos_dp_read_byte_from_i2c(dp, I2C_EDID_DEVICE_ADDR,
 				EDID_EXTENSION_FLAG,
 				&extend_block);
+	if (retval)
+		return retval;
 
 	if (extend_block > 0) {
 		dev_dbg(dp->dev, "EDID data includes a single extension!\n");
@@ -193,12 +192,14 @@ static int exynos_dp_handle_edid(struct exynos_dp_device *dp)
 	int ret;
 
 	/* Read DPCD DPCD_ADDR_DPCD_REV~RECEIVE_PORT1_CAP_1 */
-	exynos_dp_read_bytes_from_dpcd(dp, DPCD_ADDR_DPCD_REV, 12, buf);
-	
+	ret = exynos_dp_read_bytes_from_dpcd(dp, DPCD_ADDR_DPCD_REV, 12, buf);
+	if (ret)
+		return ret;
+
 	/* Read EDID */
 	for (i = 0; i < 3; i++) {
 		ret = exynos_dp_read_edid(dp);
-// 		if (!ret)
+		if (!ret)
 			break;
 	}
 
@@ -955,8 +956,6 @@ static void exynos_dp_hotplug(struct work_struct *work)
 	}
 #endif
 
-	manta_lcd_on();
-
 	ret = exynos_dp_handle_edid(dp);
 	if (ret) {
 		dev_err(dp->dev, "unable to handle edid\n");
@@ -990,8 +989,6 @@ out:
 
 static int exynos_dp_power_off(struct exynos_dp_device *dp)
 {
-	manta_lcd_off();
-
 	exynos_dp_disable_hpd(dp);
 
 	if (work_pending(&dp->hotplug_work))
@@ -1006,8 +1003,6 @@ static int exynos_dp_power_off(struct exynos_dp_device *dp)
 
 static int exynos_dp_power_on(struct exynos_dp_device *dp)
 {
-	manta_lcd_on();
-
 	if (dp->phy_ops.phy_init)
 		dp->phy_ops.phy_init();
 
@@ -1066,11 +1061,11 @@ static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 	return 0;
 }
 
-static struct exynos_drm_display_ops exynos_dp_display_ops = {
-        .type = EXYNOS_DISPLAY_TYPE_LCD,
-        .is_connected = exynos_dp_is_connected,
-        .check_timing = exynos_dp_check_timing,
-        .power_on = exynos_dp_power,
+static struct exynos_panel_ops dp_panel_ops = {
+	.subdrv_probe = exynos_dp_subdrv_probe,
+	.is_connected = exynos_dp_is_connected,
+	.check_timing = exynos_dp_check_timing,
+	.power = exynos_dp_power,
 };
 
 static int __devinit exynos_dp_probe(struct platform_device *pdev)
@@ -1081,8 +1076,6 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 
 	int ret = 0;
 	int irqflags;
-
-	DRM_DEBUG_KMS("%s\n", __FILE__);
 
 	pdata = pdev->dev.platform_data;
 	if (!pdata) {
@@ -1159,8 +1152,6 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 	if (pdata->phy_exit)
 		dp->phy_ops.phy_exit = pdata->phy_exit;
 
-	exynos_dp_init_dp(dp);
-
 	INIT_WORK(&dp->hotplug_work, exynos_dp_hotplug);
 
 	ret = request_irq(dp->irq, exynos_dp_irq_handler, irqflags,
@@ -1174,9 +1165,10 @@ static int __devinit exynos_dp_probe(struct platform_device *pdev)
 
 	exynos_dp_power(dp, DRM_MODE_DPMS_ON);
 
-	/* Create DP subdriver. */
-	
-return 0;
+	exynos_display_attach_panel(EXYNOS_DRM_DISPLAY_TYPE_FIMD, &dp_panel_ops,
+			dp);
+
+	return 0;
 
 err_gpio:
 	if (gpio_is_valid(dp->hpd_gpio))

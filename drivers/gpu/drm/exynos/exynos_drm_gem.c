@@ -33,6 +33,32 @@
 #include "exynos_drm_gem.h"
 #include "exynos_drm_buf.h"
 
+#ifdef CONFIG_DRM_EXYNOS_DEBUG
+static void exynos_gem_info_add_obj(struct drm_gem_object *obj)
+{
+	struct exynos_drm_private *dev_priv = obj->dev->dev_private;
+
+	atomic_inc(&dev_priv->mm.object_count);
+	atomic_add(obj->size, &dev_priv->mm.object_memory);
+}
+
+static void exynos_gem_info_remove_obj(struct drm_gem_object *obj)
+{
+	struct exynos_drm_private *dev_priv = obj->dev->dev_private;
+
+	atomic_dec(&dev_priv->mm.object_count);
+	atomic_sub(obj->size, &dev_priv->mm.object_memory);
+}
+#else
+static void exynos_gem_info_add_obj(struct drm_gem_object *obj)
+{
+}
+
+static void exynos_gem_info_remove_obj(struct drm_gem_object *obj)
+{
+}
+#endif
+
 static unsigned int convert_to_vm_err_msg(int msg)
 {
 	unsigned int out_msg;
@@ -80,17 +106,11 @@ out:
 	return roundup(size, PAGE_SIZE);
 }
 
-static struct page **exynos_gem_get_pages(struct drm_gem_object *obj,
+struct page **exynos_gem_get_pages(struct drm_gem_object *obj,
 						gfp_t gfpmask)
 {
-	struct inode *inode;
-	struct address_space *mapping;
 	struct page *p, **pages;
 	int i, npages;
-
-	/* This is the shared memory object that backs the GEM resource */
-	inode = obj->filp->f_path.dentry->d_inode;
-	mapping = inode->i_mapping;
 
 	npages = obj->size >> PAGE_SHIFT;
 
@@ -98,43 +118,36 @@ static struct page **exynos_gem_get_pages(struct drm_gem_object *obj,
 	if (pages == NULL)
 		return ERR_PTR(-ENOMEM);
 
-	gfpmask |= mapping_gfp_mask(mapping);
-
 	for (i = 0; i < npages; i++) {
-		p = shmem_read_mapping_page_gfp(mapping, i, gfpmask);
+		p = alloc_page(gfpmask);
 		if (IS_ERR(p))
 			goto fail;
 		pages[i] = p;
 	}
 
+	exynos_gem_info_add_obj(obj);
+
 	return pages;
 
 fail:
 	while (i--)
-		page_cache_release(pages[i]);
+		__free_page(pages[i]);
 
 	drm_free_large(pages);
 	return ERR_PTR(PTR_ERR(p));
 }
 
 static void exynos_gem_put_pages(struct drm_gem_object *obj,
-					struct page **pages,
-					bool dirty, bool accessed)
+					struct page **pages)
 {
 	int i, npages;
 
+	exynos_gem_info_remove_obj(obj);
+
 	npages = obj->size >> PAGE_SHIFT;
 
-	for (i = 0; i < npages; i++) {
-		if (dirty)
-			set_page_dirty(pages[i]);
-
-		if (accessed)
-			mark_page_accessed(pages[i]);
-
-		/* Undo the reference we took when populating the table */
-		page_cache_release(pages[i]);
-	}
+	for (i = 0; i < npages; i++)
+		__free_page(pages[i]);
 
 	drm_free_large(pages);
 }
@@ -180,6 +193,7 @@ static int exynos_drm_gem_get_pages(struct drm_gem_object *obj)
 	}
 
 	npages = obj->size >> PAGE_SHIFT;
+	buf->page_size = PAGE_SIZE;
 
 	buf->sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
 	if (!buf->sgt) {
@@ -213,7 +227,7 @@ err1:
 	kfree(buf->sgt);
 	buf->sgt = NULL;
 err:
-	exynos_gem_put_pages(obj, pages, true, false);
+	exynos_gem_put_pages(obj, pages);
 	return ret;
 
 }
@@ -231,7 +245,7 @@ static void exynos_drm_gem_put_pages(struct drm_gem_object *obj)
 	kfree(buf->sgt);
 	buf->sgt = NULL;
 
-	exynos_gem_put_pages(obj, buf->pages, true, false);
+	exynos_gem_put_pages(obj, buf->pages);
 	buf->pages = NULL;
 
 	/* add some codes for UNCACHED type here. TODO */
@@ -292,7 +306,7 @@ void exynos_drm_gem_destroy(struct exynos_drm_gem_obj *exynos_gem_obj)
 	exynos_gem_obj = NULL;
 }
 
-static struct exynos_drm_gem_obj *exynos_drm_gem_init(struct drm_device *dev,
+struct exynos_drm_gem_obj *exynos_drm_gem_init(struct drm_device *dev,
 						      unsigned long size)
 {
 	struct exynos_drm_gem_obj *exynos_gem_obj;
@@ -597,7 +611,16 @@ int exynos_drm_gem_init_object(struct drm_gem_object *obj)
 
 void exynos_drm_gem_free_object(struct drm_gem_object *obj)
 {
+	struct exynos_drm_gem_obj *exynos_gem_obj;
+	struct exynos_drm_gem_buf *buf;
+
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+
+	exynos_gem_obj = to_exynos_gem_obj(obj);
+	buf = exynos_gem_obj->buffer;
+
+	if (obj->import_attach)
+		drm_prime_gem_destroy(obj, buf->sgt);
 
 	exynos_drm_gem_destroy(to_exynos_gem_obj(obj));
 }
@@ -611,13 +634,28 @@ int exynos_drm_gem_dumb_create(struct drm_file *file_priv,
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
+	if (!(args->flags & EXYNOS_BO_NONCONTIG)) {
+		DRM_ERROR("contig buffer allocation not supported.\n");
+		/*
+		 * HACK: Currently we do not support CONTIG buffer
+		 * allocation from user space. The drm framework
+		 * supports non-contig buffers only. In the next versions
+		 * the option to choose contig/non-contig buffers itself
+		 * is not supported through this flag. For now, we just
+		 * return error.
+		 */
+		return -EINVAL;
+	}
+
 	/*
 	 * alocate memory to be used for framebuffer.
 	 * - this callback would be called by user application
 	 *	with DRM_IOCTL_MODE_CREATE_DUMB command.
 	 */
 
-	args->pitch = args->width * args->bpp >> 3;
+	args->pitch = args->width * ALIGN(args->bpp, 8) >> 3;
+	args->pitch = round_up(args->pitch, 64);
+
 	args->size = PAGE_ALIGN(args->pitch * args->height);
 
 	exynos_gem_obj = exynos_drm_gem_create(dev, args->flags, args->size);

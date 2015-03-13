@@ -39,14 +39,14 @@
 #include "exynos_drm_gem.h"
 #include "exynos_drm_plane.h"
 #include "exynos_drm_vidi.h"
+#include "exynos_drm_dmabuf.h"
+#include "exynos_drm_display.h"
 
 #define DRIVER_NAME	"exynos"
 #define DRIVER_DESC	"Samsung SoC DRM"
 #define DRIVER_DATE	"20110530"
 #define DRIVER_MAJOR	1
 #define DRIVER_MINOR	0
-
-extern struct platform_driver dp_driver;
 
 #define VBLANK_OFF_DELAY	50000
 
@@ -64,7 +64,24 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 		return -ENOMEM;
 	}
 
-	INIT_LIST_HEAD(&private->pageflip_event_list);
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	if (kds_callback_init(&private->kds_cb, 1,
+			      exynos_drm_kds_callback) < 0) {
+		DRM_ERROR("kds alloc queue failed.\n");
+		ret = -ENOMEM;
+		goto err_kds;
+	}
+	if (kds_callback_init(&private->kds_cb_rm_fb, 0,
+			      exynos_drm_kds_callback_rm_fb) < 0) {
+		DRM_ERROR("kds alloc queue failed.\n");
+		ret = -ENOMEM;
+		goto err_kds_rm_fb;
+	}
+#endif
+
+	DRM_INIT_WAITQUEUE(&private->wait_vsync_queue);
+	atomic_set(&private->wait_vsync_event, 0);
+
 	dev->dev_private = (void *)private;
 
 	drm_mode_config_init(dev);
@@ -100,10 +117,8 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 	 * to the sub driver and create encoder and connector for them.
 	 */
 	ret = exynos_drm_device_register(dev);
-	if (ret) {
-		DRM_ERROR("exynos_drm_device_register failed\n");
+	if (ret)
 		goto err_vblank;
-	}
 
 	/* setup possible_clones. */
 	exynos_drm_encoder_setup(dev);
@@ -128,6 +143,12 @@ err_vblank:
 	drm_vblank_cleanup(dev);
 err_crtc:
 	drm_mode_config_cleanup(dev);
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	kds_callback_term(&private->kds_cb_rm_fb);
+err_kds_rm_fb:
+	kds_callback_term(&private->kds_cb);
+err_kds:
+#endif
 	kfree(private);
 
 	return ret;
@@ -135,6 +156,8 @@ err_crtc:
 
 static int exynos_drm_unload(struct drm_device *dev)
 {
+	struct exynos_drm_private *private = dev->dev_private;
+
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
 	exynos_drm_fbdev_fini(dev);
@@ -142,7 +165,10 @@ static int exynos_drm_unload(struct drm_device *dev)
 	drm_vblank_cleanup(dev);
 	drm_kms_helper_poll_fini(dev);
 	drm_mode_config_cleanup(dev);
-	kfree(dev->dev_private);
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
+	kds_callback_term(&private->kds_cb);
+#endif
+	kfree(private);
 
 	dev->dev_private = NULL;
 
@@ -159,22 +185,7 @@ static int exynos_drm_open(struct drm_device *dev, struct drm_file *file)
 static void exynos_drm_preclose(struct drm_device *dev,
 					struct drm_file *file)
 {
-	struct exynos_drm_private *private = dev->dev_private;
-	struct drm_pending_vblank_event *e, *t;
-	unsigned long flags;
-
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
-
-	/* release events of current file */
-	spin_lock_irqsave(&dev->event_lock, flags);
-	list_for_each_entry_safe(e, t, &private->pageflip_event_list,
-			base.link) {
-		if (e->base.file_priv == file) {
-			list_del(&e->base.link);
-			e->base.destroy(&e->base);
-		}
-	}
-	spin_unlock_irqrestore(&dev->event_lock, flags);
 
 	exynos_drm_subdrv_close(dev, file);
 }
@@ -229,7 +240,7 @@ static const struct file_operations exynos_drm_driver_fops = {
 
 static struct drm_driver exynos_drm_driver = {
 	.driver_features	= DRIVER_HAVE_IRQ | DRIVER_BUS_PLATFORM |
-				  DRIVER_MODESET | DRIVER_GEM,
+				  DRIVER_MODESET | DRIVER_GEM | DRIVER_PRIME,
 	.load			= exynos_drm_load,
 	.unload			= exynos_drm_unload,
 	.open			= exynos_drm_open,
@@ -239,12 +250,20 @@ static struct drm_driver exynos_drm_driver = {
 	.get_vblank_counter	= drm_vblank_count,
 	.enable_vblank		= exynos_drm_crtc_enable_vblank,
 	.disable_vblank		= exynos_drm_crtc_disable_vblank,
+#if defined(CONFIG_DEBUG_FS)
+	.debugfs_init		= exynos_drm_debugfs_init,
+	.debugfs_cleanup	= exynos_drm_debugfs_cleanup,
+#endif
 	.gem_init_object	= exynos_drm_gem_init_object,
 	.gem_free_object	= exynos_drm_gem_free_object,
 	.gem_vm_ops		= &exynos_drm_gem_vm_ops,
 	.dumb_create		= exynos_drm_gem_dumb_create,
 	.dumb_map_offset	= exynos_drm_gem_dumb_map_offset,
 	.dumb_destroy		= exynos_drm_gem_dumb_destroy,
+	.prime_handle_to_fd	= drm_gem_prime_handle_to_fd,
+	.prime_fd_to_handle	= drm_gem_prime_fd_to_handle,
+	.gem_prime_export	= exynos_dmabuf_prime_export,
+	.gem_prime_import	= exynos_dmabuf_prime_import,
 	.ioctls			= exynos_ioctls,
 	.fops			= &exynos_drm_driver_fops,
 	.name	= DRIVER_NAME,
@@ -254,29 +273,240 @@ static struct drm_driver exynos_drm_driver = {
 	.minor	= DRIVER_MINOR,
 };
 
+#ifdef CONFIG_EXYNOS_IOMMU
+static int iommu_init(struct platform_device *pdev)
+{
+	/* DRM device expects a IOMMU mapping to be already
+	 * created in FIMD. Else this function should
+	 * throw an error.
+	 */
+	if (exynos_drm_common_mapping==NULL) {
+		printk(KERN_ERR "exynos drm common mapping is invalid\n");
+		return -1;
+	}
+
+	/*
+	 * The ordering in Makefile warrants that this is initialized after
+	 * FIMD, so only just ensure that it works as expected and we are
+	 * reusing the mapping originally created in exynos_drm_fimd.c.
+	 */
+	WARN_ON(!exynos_drm_common_mapping);
+	if (!s5p_create_iommu_mapping(&pdev->dev, 0,
+				0, 0, exynos_drm_common_mapping)) {
+		printk(KERN_ERR "failed to create IOMMU mapping\n");
+		return -1;
+	}
+
+	return 0;
+}
+
+static void iommu_deinit(struct platform_device *pdev)
+{
+	/* detach the device and mapping */
+	s5p_destroy_iommu_mapping(&pdev->dev);
+	DRM_DEBUG("released the IOMMU mapping\n");
+
+	return;
+}
+#endif
+
 static int exynos_drm_platform_probe(struct platform_device *pdev)
 {
-	int ret;
+	struct device *dev = &pdev->dev;
 
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
+#ifdef CONFIG_EXYNOS_IOMMU
+	if (iommu_init(pdev)) {
+		DRM_ERROR("failed to initialize IOMMU\n");
+		return -ENODEV;
+	}
+#endif
+
 	exynos_drm_driver.num_ioctls = DRM_ARRAY_SIZE(exynos_ioctls);
 
-	ret = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
-	if (ret)
-		return ret;
+	pm_runtime_enable(dev);
+	pm_runtime_get_sync(dev);
 
 	return drm_platform_init(&exynos_drm_driver, pdev);
 }
 
-static int exynos_drm_platform_remove(struct platform_device *pdev)
+static int __devexit exynos_drm_platform_remove(struct platform_device *pdev)
 {
+	struct device *dev = &pdev->dev;
+
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
+	pm_runtime_disable(dev);
 
 	drm_platform_exit(&exynos_drm_driver, pdev);
 
+#ifdef CONFIG_EXYNOS_IOMMU
+	iommu_deinit(pdev);
+#endif
 	return 0;
 }
+
+/* TODO (seanpaul): Once we remove platform drivers, we'll be calling the
+ * various panel/controller init functions directly. These init functions will
+ * return to us the ops and context, so we can get rid of these attach
+ * functions. Once the attach functions are gone, we can move this array of
+ * display pointers into the drm device's platform data.
+ *
+ * For now, we'll use a global to keep track of things.
+ */
+static struct exynos_drm_display *displays[EXYNOS_DRM_DISPLAY_NUM_DISPLAYS];
+
+void exynos_display_attach_panel(enum exynos_drm_display_type type,
+		struct exynos_panel_ops *ops, void *ctx)
+{
+	int i;
+	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
+		if (displays[i]->display_type == type) {
+			displays[i]->panel_ctx = ctx;
+			displays[i]->panel_ops = ops;
+			return;
+		}
+	}
+}
+
+void exynos_display_attach_controller(enum exynos_drm_display_type type,
+		struct exynos_controller_ops *ops, void *ctx)
+{
+	int i;
+	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
+		if (displays[i]->display_type == type) {
+			displays[i]->controller_ctx = ctx;
+			displays[i]->controller_ops = ops;
+			return;
+		}
+	}
+}
+
+static int display_subdrv_probe(struct drm_device *drm_dev,
+		struct exynos_drm_subdrv *subdrv)
+{
+	struct exynos_drm_display *display = subdrv->display;
+	int ret;
+
+	if (!display->controller_ops || !display->panel_ops)
+		return -EINVAL;
+
+	if (display->controller_ops->subdrv_probe) {
+		ret = display->controller_ops->subdrv_probe(
+				display->controller_ctx, drm_dev);
+		if (ret)
+			return ret;
+	}
+
+	if (display->panel_ops->subdrv_probe) {
+		ret = display->panel_ops->subdrv_probe(display->panel_ctx,
+				drm_dev);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+int exynos_display_init(struct exynos_drm_display *display,
+		enum exynos_drm_display_type type)
+{
+	struct exynos_drm_subdrv *subdrv;
+
+	subdrv = kzalloc(sizeof(*subdrv), GFP_KERNEL);
+	if (!subdrv) {
+		DRM_ERROR("Failed to allocate display subdrv\n");
+		return -ENOMEM;
+	}
+
+	display->display_type = type;
+	display->pipe = -1;
+	display->subdrv = subdrv;
+
+	subdrv->probe = display_subdrv_probe;
+	subdrv->display = display;
+	exynos_drm_subdrv_register(subdrv);
+
+	return 0;
+}
+
+void exynos_display_remove(struct exynos_drm_display *display)
+{
+	if (display->subdrv) {
+		exynos_drm_subdrv_unregister(display->subdrv);
+		kfree(display->subdrv);
+	}
+}
+
+static int exynos_drm_resume_displays(void)
+{
+	int i;
+
+	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
+		struct exynos_drm_display *display = displays[i];
+		struct drm_encoder *encoder = display->subdrv->encoder;
+
+		if (!encoder)
+			continue;
+
+		exynos_drm_encoder_dpms(encoder, display->suspend_dpms);
+	}
+	return 0;
+}
+
+static int exynos_drm_suspend_displays(void)
+{
+	int i;
+
+	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
+		struct exynos_drm_display *display = displays[i];
+		struct drm_encoder *encoder = display->subdrv->encoder;
+
+		if (!encoder)
+			continue;
+
+		display->suspend_dpms = exynos_drm_encoder_get_dpms(encoder);
+		exynos_drm_encoder_dpms(encoder, DRM_MODE_DPMS_OFF);
+	}
+	return 0;
+}
+
+#ifdef CONFIG_PM_SLEEP
+static int exynos_drm_suspend(struct device *dev)
+{
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	return exynos_drm_suspend_displays();
+}
+
+static int exynos_drm_resume(struct device *dev)
+{
+	if (pm_runtime_suspended(dev))
+		return 0;
+
+	return exynos_drm_resume_displays();
+}
+#endif
+
+#ifdef CONFIG_PM_RUNTIME
+static int exynos_drm_runtime_resume(struct device *dev)
+{
+	return exynos_drm_resume_displays();
+}
+
+static int exynos_drm_runtime_suspend(struct device *dev)
+{
+	return exynos_drm_suspend_displays();
+}
+#endif
+
+static const struct dev_pm_ops drm_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(exynos_drm_suspend, exynos_drm_resume)
+	SET_RUNTIME_PM_OPS(exynos_drm_runtime_suspend,
+			exynos_drm_runtime_resume, NULL)
+};
 
 static struct platform_driver exynos_drm_platform_driver = {
 	.probe		= exynos_drm_platform_probe,
@@ -284,67 +514,59 @@ static struct platform_driver exynos_drm_platform_driver = {
 	.driver		= {
 		.owner	= THIS_MODULE,
 		.name	= "exynos-drm",
+		.pm	= &drm_pm_ops,
 	},
 };
 
 static int __init exynos_drm_init(void)
 {
-	int ret;
+	int ret, i;
 
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
+
+	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
+		displays[i] = kzalloc(sizeof(*displays[i]), GFP_KERNEL);
+		if (!displays[i]) {
+			ret = -ENOMEM;
+			goto out_display;
+		}
+
+		ret = exynos_display_init(displays[i], i);
+		if (ret)
+			goto out_display;
+	}
 
 #ifdef CONFIG_DRM_EXYNOS_FIMD
 	ret = platform_driver_register(&fimd_driver);
 	if (ret < 0)
-	{
-		DRM_ERROR("Failed to register fimd\n");
 		goto out_fimd;
-	}
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_DP
 	ret = platform_driver_register(&dp_driver);
 	if (ret < 0)
-	{
-		DRM_ERROR("Failed to register dp\n");
-		goto out_dp;
-	}
+		goto out_dp_driver;
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_HDMI
 	ret = platform_driver_register(&hdmi_driver);
 	if (ret < 0)
-	{
-		DRM_ERROR("Failed to register HDMI\n");
 		goto out_hdmi;
-	}
-
 	ret = platform_driver_register(&mixer_driver);
 	if (ret < 0)
-	{
-		DRM_ERROR("Failed to register mixer\n");
 		goto out_mixer;
-	}
-
-	ret = platform_driver_register(&exynos_drm_common_hdmi_driver);
-	if (ret < 0) {
-		DRM_ERROR("Failed to register common_hdmi\n");
-		goto out_common_hdmi;
-	}
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_VIDI
 	ret = platform_driver_register(&vidi_driver);
-	if (ret < 0) {
-		DRM_ERROR("Failed to register vidi");
+	if (ret < 0)
 		goto out_vidi;
-	}
 #endif
+
 	ret = platform_driver_register(&exynos_drm_platform_driver);
-	if (ret < 0) {
-		DRM_ERROR("Failed to register driver\n");
+	if (ret < 0)
 		goto out;
-	}
+
 	return 0;
 
 out:
@@ -354,34 +576,38 @@ out_vidi:
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_HDMI
-	platform_driver_unregister(&exynos_drm_common_hdmi_driver);
-out_common_hdmi:
 	platform_driver_unregister(&mixer_driver);
 out_mixer:
 	platform_driver_unregister(&hdmi_driver);
 out_hdmi:
 #endif
 
-#ifdef CONFIG_DRM_EXYNOS_DP
 	platform_driver_unregister(&dp_driver);
-out_dp:
-#endif
-
+out_dp_driver:
 #ifdef CONFIG_DRM_EXYNOS_FIMD
 	platform_driver_unregister(&fimd_driver);
 out_fimd:
 #endif
+out_display:
+	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
+		if (!displays[i])
+			continue;
+
+		exynos_display_remove(displays[i]);
+		kfree(displays[i]);
+	}
 	return ret;
 }
 
 static void __exit exynos_drm_exit(void)
 {
+	int i;
+
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
 
 	platform_driver_unregister(&exynos_drm_platform_driver);
 
 #ifdef CONFIG_DRM_EXYNOS_HDMI
-	platform_driver_unregister(&exynos_drm_common_hdmi_driver);
 	platform_driver_unregister(&mixer_driver);
 	platform_driver_unregister(&hdmi_driver);
 #endif
@@ -390,9 +616,18 @@ static void __exit exynos_drm_exit(void)
 	platform_driver_unregister(&vidi_driver);
 #endif
 
+	platform_driver_unregister(&dp_driver);
 #ifdef CONFIG_DRM_EXYNOS_FIMD
 	platform_driver_unregister(&fimd_driver);
 #endif
+
+	for (i = 0; i < EXYNOS_DRM_DISPLAY_NUM_DISPLAYS; i++) {
+		if (!displays[i])
+			continue;
+
+		exynos_display_remove(displays[i]);
+		kfree(displays[i]);
+	}
 }
 
 module_init(exynos_drm_init);
