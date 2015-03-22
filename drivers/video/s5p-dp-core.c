@@ -1366,7 +1366,7 @@ static void __exit s5p_dp_exit(void)
 #ifdef CONFIG_FB_EXYNOS_FIMD_MC
 late_initcall(s5p_dp_init);
 #else
-module_init(s5p_dp_init);
+late_initcall(s5p_dp_init);
 #endif
 module_exit(s5p_dp_exit);
 

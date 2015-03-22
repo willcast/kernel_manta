@@ -67,4 +67,9 @@ static inline void platform_set_sysmmu(
 
 #define SYSMMU_CLOCK_DEVNAME(ipname, id) (SYSMMU_DEVNAME_BASE "." #id)
 
+struct dma_iommu_mapping *s5p_create_iommu_mapping(struct device *client,
+                                dma_addr_t base, unsigned int size, int order,
+                                struct dma_iommu_mapping *mapping);
+void s5p_destroy_iommu_mapping(struct device *client);
+
 #endif /* _ARM_MACH_EXYNOS_SYSMMU_H_ */

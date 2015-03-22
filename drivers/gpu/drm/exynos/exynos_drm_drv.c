@@ -31,6 +31,8 @@
 
 #include <drm/exynos_drm.h>
 
+#include <linux/pm_runtime.h>
+
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_encoder.h"
@@ -49,6 +51,8 @@
 #define DRIVER_MINOR	0
 
 #define VBLANK_OFF_DELAY	50000
+
+extern struct platform_driver s5p_dp_driver;
 
 static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 {
@@ -280,30 +284,32 @@ static int iommu_init(struct platform_device *pdev)
 	 * created in FIMD. Else this function should
 	 * throw an error.
 	 */
+/*
 	if (exynos_drm_common_mapping==NULL) {
 		printk(KERN_ERR "exynos drm common mapping is invalid\n");
 		return -1;
 	}
-
+*/
 	/*
 	 * The ordering in Makefile warrants that this is initialized after
 	 * FIMD, so only just ensure that it works as expected and we are
 	 * reusing the mapping originally created in exynos_drm_fimd.c.
 	 */
-	WARN_ON(!exynos_drm_common_mapping);
+	//WARN_ON(!exynos_drm_common_mapping);
+/*
 	if (!s5p_create_iommu_mapping(&pdev->dev, 0,
 				0, 0, exynos_drm_common_mapping)) {
 		printk(KERN_ERR "failed to create IOMMU mapping\n");
 		return -1;
 	}
-
+*/
 	return 0;
 }
 
 static void iommu_deinit(struct platform_device *pdev)
 {
 	/* detach the device and mapping */
-	s5p_destroy_iommu_mapping(&pdev->dev);
+	//s5p_destroy_iommu_mapping(&pdev->dev);
 	DRM_DEBUG("released the IOMMU mapping\n");
 
 	return;
@@ -312,6 +318,7 @@ static void iommu_deinit(struct platform_device *pdev)
 
 static int exynos_drm_platform_probe(struct platform_device *pdev)
 {
+	int ret;	
 	struct device *dev = &pdev->dev;
 
 	DRM_DEBUG_DRIVER("%s\n", __FILE__);
@@ -327,6 +334,10 @@ static int exynos_drm_platform_probe(struct platform_device *pdev)
 
 	pm_runtime_enable(dev);
 	pm_runtime_get_sync(dev);
+
+	ret = dma_set_coherent_mask(&pdev->dev, DMA_BIT_MASK(32));
+	if (ret) 
+		return ret;
 
 	return drm_platform_init(&exynos_drm_driver, pdev);
 }
@@ -543,7 +554,7 @@ static int __init exynos_drm_init(void)
 #endif
 
 #ifdef CONFIG_DRM_EXYNOS_DP
-	ret = platform_driver_register(&dp_driver);
+	ret = platform_driver_register(&s5p_dp_driver);
 	if (ret < 0)
 		goto out_dp_driver;
 #endif
@@ -581,9 +592,10 @@ out_mixer:
 	platform_driver_unregister(&hdmi_driver);
 out_hdmi:
 #endif
-
-	platform_driver_unregister(&dp_driver);
+#ifdef CONFIG_DRM_EXYNOS_DP
+	platform_driver_unregister(&s5p_dp_driver);
 out_dp_driver:
+#endif
 #ifdef CONFIG_DRM_EXYNOS_FIMD
 	platform_driver_unregister(&fimd_driver);
 out_fimd:
@@ -615,8 +627,9 @@ static void __exit exynos_drm_exit(void)
 #ifdef CONFIG_DRM_EXYNOS_VIDI
 	platform_driver_unregister(&vidi_driver);
 #endif
-
-	platform_driver_unregister(&dp_driver);
+#ifdef CONFIG_DRM_EXYNOS_DP
+	platform_driver_unregister(&s5p_dp_driver);
+#endif
 #ifdef CONFIG_DRM_EXYNOS_FIMD
 	platform_driver_unregister(&fimd_driver);
 #endif

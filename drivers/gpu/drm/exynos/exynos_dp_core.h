@@ -59,6 +59,7 @@ void exynos_dp_enable_video_mute(struct exynos_dp_device *dp, bool enable);
 void exynos_dp_stop_video(struct exynos_dp_device *dp);
 void exynos_dp_lane_swap(struct exynos_dp_device *dp, bool enable);
 void exynos_dp_init_interrupt(struct exynos_dp_device *dp);
+void exynos_dp_config_interrupt(struct exynos_dp_device *dp);
 void exynos_dp_reset(struct exynos_dp_device *dp);
 enum pll_status exynos_dp_get_pll_lock_status(struct exynos_dp_device *dp);
 void exynos_dp_set_pll_power_down(struct exynos_dp_device *dp, bool enable);

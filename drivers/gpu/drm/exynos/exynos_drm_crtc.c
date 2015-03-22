@@ -435,8 +435,10 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 
 	return 0;
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 fail_kds:
 	*pkds = NULL;
+#endif
 	spin_lock_irqsave(&dev->event_lock, flags);
 	exynos_crtc->flip_in_flight--;
 	spin_unlock_irqrestore(&dev->event_lock, flags);
@@ -462,6 +464,8 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 
 	trace_exynos_flip_complete(crtc_idx);
 
+
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	spin_lock_irqsave(&drm_dev->event_lock, flags);
 	if (exynos_crtc->event) {
 		exynos_drm_crtc_flip_complete(exynos_crtc->event);
@@ -470,11 +474,14 @@ void exynos_drm_crtc_finish_pageflip(struct drm_device *drm_dev, int crtc_idx)
 	kds = exynos_crtc->current_kds;
 	exynos_crtc->current_kds = exynos_crtc->pending_kds;
 	exynos_crtc->pending_kds = NULL;
+#endif
 	exynos_crtc->flip_in_flight--;
 	spin_unlock_irqrestore(&drm_dev->event_lock, flags);
 
+#ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	if (kds)
 		kds_resource_set_release(&kds);
+#endif
 
 	drm_vblank_put(drm_dev, crtc_idx);
 }

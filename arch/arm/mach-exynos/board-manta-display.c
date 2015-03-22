@@ -117,7 +117,7 @@ static struct platform_device manta_lcd = {
 	},
 };
 
-static void manta_fimd_gpio_setup_24bpp(void)
+void manta_fimd_gpio_setup_24bpp(void)
 {
 	u32 reg;
 
@@ -152,6 +152,30 @@ static struct s3c_fb_pd_win manta_fb_win2 = {
 	.default_bpp		= 24,
 	.width			= 218,
 	.height			= 136,
+};
+static struct exynos_drm_fimd_pdata manta_drm_fimd_pdata = {
+	.panel = {
+       		.timing = {
+		        .name = "Default",
+	        	.xres = 2560,
+			.yres = 1600,
+			.left_margin    = 80,
+			.right_margin   = 48,
+			.upper_margin   = 37, // 37
+			.lower_margin   = 3, // 3
+			.hsync_len      = 32,
+			.vsync_len      = 6,
+			.sync = 0,
+		},
+		.width_mm = 218,
+		.height_mm = 136,
+	},
+	.default_win	= 0,
+	.vidcon0	= VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB,
+	.vidcon1	= 0,
+	.bpp		= 24,
+//	unsigned int			clock_rate;
+	.panel_type	= DP_LCD,
 };
 
 static struct s3c_fb_platdata manta_lcd1_pdata __initdata = {
@@ -236,17 +260,22 @@ static struct exynos_drm_common_hdmi_pd exynos_device_drm_hdmi_platdata = {
 	.mixer_dev = &(s5p_device_mixer.dev),
 };
 
+static struct platform_device manta_device_drm_fimd = {
+	.name = "exynos-drm-fimd",
+	.dev = {
+		.platform_data = &manta_drm_fimd_pdata,
+	},
+};
+
 static struct platform_device exynos_device_drm_hdmi = {
 	.name = "exynos-drm-hdmi",
 	.dev = {
 		.platform_data = &exynos_device_drm_hdmi_platdata,
 	},
-	.id = 3,
 };
 
 static struct platform_device exynos_device_drm = {
 	.name = "exynos-drm",
-	.id = 4,
 };
 
 static struct platform_device *manta_display_devices[] __initdata = {
@@ -261,7 +290,8 @@ static struct platform_device *manta_display_devices[] __initdata = {
 	&s5p_device_i2c_hdmiphy,
 	&s5p_device_mixer,
 	&s5p_device_hdmi,
-
+	
+	&manta_device_drm_fimd,
 	&exynos_device_drm_hdmi,
 	&exynos_device_drm,
 };

@@ -443,4 +443,8 @@ struct drm_mode_destroy_dumb {
 	uint32_t handle;
 };
 
+struct drm_display_mode;
+
+bool drm_mode_equal_no_clocks_no_stereo(const struct drm_display_mode *mode1,
+                                        const struct drm_display_mode *mode2);
 #endif

@@ -61,6 +61,8 @@ static int exynos_drm_subdrv_probe(struct drm_device *dev,
 		ret = subdrv->probe(dev, subdrv);
 		if (ret)
 			return ret;
+	} else {
+		DRM_DEBUG_DRIVER("no probe func\n");
 	}
 
 	if (!subdrv->display)

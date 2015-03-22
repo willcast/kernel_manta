@@ -1354,7 +1354,7 @@ void __init s3c24xx_ts_set_platdata(struct s3c2410_ts_mach_info *pd)
 
 /* TV */
 
-#ifdef CONFIG_S5P_DEV_TV
+#if defined(CONFIG_S5P_DEV_TV) || defined(CONFIG_DRM_EXYNOS_HDMI)
 
 static struct resource s5p_hdmi_resources[] = {
 	[0] = DEFINE_RES_MEM(S5P_PA_HDMI, SZ_1M),

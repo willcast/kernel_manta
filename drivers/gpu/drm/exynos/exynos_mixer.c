@@ -1108,28 +1108,32 @@ static struct exynos_controller_ops mixer_ops = {
 #ifdef CONFIG_EXYNOS_IOMMU
 static int iommu_init(struct platform_device *pdev)
 {
+#ifdef CONFIG_OF
 	struct platform_device *pds;
 
-	pds = find_sysmmu_dt(pdev, "sysmmu");
+	pds = ;
 	if (pds == NULL) {
 		printk(KERN_ERR "No sysmmu found  :\n");
 		return -EINVAL;
 	}
 
 	platform_set_sysmmu(&pds->dev, &pdev->dev);
+#endif
 	/*
 	 * The ordering in Makefile warrants that this is initialized after
 	 * FIMD, so only just ensure that it works as expected and we are
 	 * reusing the mapping originally created in exynos_drm_fimd.c.
 	 */
+/*
 	WARN_ON(!exynos_drm_common_mapping);
+
 	exynos_drm_common_mapping = s5p_create_iommu_mapping(&pdev->dev,
 					0, 0, 0, exynos_drm_common_mapping);
 	if(exynos_drm_common_mapping == NULL) {
 		printk(KERN_ERR"Failed to create iommu mapping for Mixer\n");
 		return -EINVAL;
 	}
-
+*/
 	return 0;
 }
 #endif
@@ -1310,7 +1314,7 @@ static int __devinit mixer_probe(struct platform_device *pdev)
 	pdata = pdev->dev.platform_data;
 
 	/* acquire resources: regs, irqs, clocks */
-	ret = mixer_resources_init_exynos(mctx, pdev, pdata->is_soc_exynos5);
+	ret = mixer_resources_init_exynos(mctx, pdev, 1);
 	if (ret)
 		goto fail;
 

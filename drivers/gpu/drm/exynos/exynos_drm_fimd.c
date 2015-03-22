@@ -111,6 +111,23 @@ struct fimd_context {
 	struct exynos_drm_panel_info *panel;
 };
 
+static struct exynos_drm_panel_info manta_drm_panel_info = {
+        .timing = {
+	        .name = "Default",
+	        .xres = 2560,
+		.yres = 1600,
+		.left_margin    = 80,
+		.right_margin   = 48,
+		.upper_margin   = 37, // 37
+		.lower_margin   = 3, // 3
+		.hsync_len      = 32,
+		.vsync_len      = 6,
+		.sync = 0,
+	},
+	.width_mm = 218,
+	.height_mm = 136,
+};
+
 static struct exynos_drm_panel_info *fimd_get_panel(void *ctx)
 {
 	struct fimd_context *fimd_ctx = ctx;
@@ -180,7 +197,9 @@ static void fimd_commit(void *ctx)
 
 	/* setup horizontal and vertical display size. */
 	val = VIDTCON2_LINEVAL(win_data->ovl_height - 1) |
-	       VIDTCON2_HOZVAL(win_data->ovl_width - 1);
+              VIDTCON2_HOZVAL(win_data->ovl_width - 1) |
+              VIDTCON2_LINEVAL_E(win_data->ovl_height - 1) |
+              VIDTCON2_HOZVAL_E(win_data->ovl_width - 1);
 	writel(val, fimd_ctx->regs + VIDTCON2);
 
 	/* setup clock source, clock divider, enable dma. */
@@ -444,6 +463,7 @@ static void fimd_win_set_colkey(struct fimd_context *fimd_ctx, unsigned int win)
 	writel(keycon1, fimd_ctx->regs + WKEYCON1_BASE(win));
 }
 
+#if 0
 static void mie_set_6bit_dithering(struct fimd_context *ctx, int win)
 {
 	struct fimd_win_data *win_data = &ctx->win_data[win];
@@ -482,13 +502,14 @@ static void mie_set_6bit_dithering(struct fimd_context *ctx, int win)
 		writel(0, ctx->regs_mie + 0x200 + i);
 	}
 }
+#endif
 
 static void fimd_win_commit(void *ctx, int zpos)
 {
 	struct fimd_context *fimd_ctx = ctx;
 	struct fimd_win_data *win_data;
 	int win = zpos;
-	unsigned long val, alpha, size;
+	unsigned long val, alpha, size, last_x, last_y;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -534,18 +555,23 @@ static void fimd_win_commit(void *ctx, int zpos)
 
 	/* buffer size */
 	val = VIDW_BUF_SIZE_OFFSET(win_data->buf_offsize) |
-		VIDW_BUF_SIZE_PAGEWIDTH(win_data->line_size);
+	       VIDW_BUF_SIZE_PAGEWIDTH(win_data->line_size) |
+               VIDW_BUF_SIZE_OFFSET_E(win_data->buf_offsize) |
+               VIDW_BUF_SIZE_PAGEWIDTH_E(win_data->line_size);
 	writel(val, fimd_ctx->regs + VIDWx_BUF_SIZE(win, 0));
 
 	/* OSD position */
 	val = VIDOSDxA_TOPLEFT_X(win_data->offset_x) |
-		VIDOSDxA_TOPLEFT_Y(win_data->offset_y);
+               VIDOSDxA_TOPLEFT_Y(win_data->offset_y) |
+               VIDOSDxA_TOPLEFT_X_E(win_data->offset_x) |
+               VIDOSDxA_TOPLEFT_Y_E(win_data->offset_y);
 	writel(val, fimd_ctx->regs + VIDOSD_A(win));
 
-	val = VIDOSDxB_BOTRIGHT_X(win_data->offset_x +
-					win_data->ovl_width - 1) |
-		VIDOSDxB_BOTRIGHT_Y(win_data->offset_y +
-					win_data->ovl_height - 1);
+	last_x = win_data->offset_x + win_data->ovl_width - 1;
+	last_y = win_data->offset_y + win_data->ovl_height - 1;
+
+	val = VIDOSDxB_BOTRIGHT_X(last_x) | VIDOSDxB_BOTRIGHT_Y(last_y) |
+		VIDOSDxB_BOTRIGHT_X_E(last_x) | VIDOSDxB_BOTRIGHT_Y_E(last_y);
 	writel(val, fimd_ctx->regs + VIDOSD_B(win));
 
 	DRM_DEBUG_KMS("osd pos: tx = %d, ty = %d, bx = %d, by = %d\n",
@@ -585,7 +611,7 @@ static void fimd_win_commit(void *ctx, int zpos)
 	val |= WINCONx_ENWIN;
 	writel(val, fimd_ctx->regs + WINCON(win));
 
-	mie_set_6bit_dithering(fimd_ctx, win);
+	//mie_set_6bit_dithering(fimd_ctx, win);
 
 	/* Enable DMA channel and unprotect windows */
 	val = readl(fimd_ctx->regs + SHADOWCON);
@@ -788,8 +814,11 @@ static int fimd_power_on(struct fimd_context *fimd_ctx, bool enable)
 		fimd_apply(fimd_ctx);
 		fimd_commit(fimd_ctx);
 
+		/*
 		if (fimd_ctx->panel_type == DP_LCD)
 			writel(MIE_CLK_ENABLE, fimd_ctx->regs + DPCLKCON);
+		*/
+	        writel(DPCLKCON_ENABLE, fimd_ctx->regs + DPCLKCON);
 
 		fimd_window_resume(fimd_ctx);
 	} else {
@@ -817,6 +846,7 @@ static int iommu_init(struct platform_device *pdev)
 {
 	struct platform_device *pds;
 
+#if 0
 	pds = find_sysmmu_dt(pdev, "sysmmu");
 	if (pds==NULL) {
 		printk(KERN_ERR "No sysmmu found\n");
@@ -839,13 +869,14 @@ static int iommu_init(struct platform_device *pdev)
 		printk(KERN_ERR "IOMMU mapping not created\n");
 		return -1;
 	}
+#endif
 
 	return 0;
 }
 
 static void iommu_deinit(struct platform_device *pdev)
 {
-	s5p_destroy_iommu_mapping(&pdev->dev);
+	//s5p_destroy_iommu_mapping(&pdev->dev);
 	DRM_DEBUG("released the IOMMU mapping\n");
 
 	return;
@@ -881,7 +912,7 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 	if (!fimd_ctx)
 		return -ENOMEM;
 
-	fimd_ctx->panel_type = pdata->panel_type;
+	fimd_ctx->panel_type = DP_LCD;
 	fimd_ctx->pipe = -1;
 
 	fimd_ctx->bus_clk = clk_get(dev, "fimd");
@@ -938,12 +969,12 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 		goto err_req_region_io;
 	}
 
-	fimd_ctx->regs_mie = ioremap(MIE_BASE_ADDRESS, 0x400);
+/*	fimd_ctx->regs_mie = ioremap(MIE_BASE_ADDRESS, 0x400);
 	if (!fimd_ctx->regs_mie) {
 		dev_err(dev, "failed to map registers\n");
 		ret = -ENXIO;
 		goto err_req_region_io_mie;
-	}
+	}*/
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 1);
 	if (!res) {
@@ -960,10 +991,10 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 		goto err_req_irq;
 	}
 
-	fimd_ctx->vidcon0 = pdata->vidcon0;
-	fimd_ctx->vidcon1 = pdata->vidcon1;
-	fimd_ctx->default_win = pdata->default_win;
-	fimd_ctx->panel = &pdata->panel;
+	fimd_ctx->vidcon0 = VIDCON0_VIDOUT_RGB | VIDCON0_PNRMODE_RGB;
+	fimd_ctx->vidcon1 = 0;
+	fimd_ctx->default_win = 0;
+	fimd_ctx->panel = &manta_drm_panel_info;
 
 	mutex_init(&fimd_ctx->lock);
 
@@ -974,9 +1005,10 @@ static int __devinit fimd_probe(struct platform_device *pdev)
 	for (win = 0; win < WINDOWS_NR; win++)
 		fimd_clear_win(fimd_ctx, win);
 
+/*
 	if (fimd_ctx->panel_type == DP_LCD)
 		writel(MIE_CLK_ENABLE, fimd_ctx->regs + DPCLKCON);
-
+*/
 	exynos_display_attach_controller(EXYNOS_DRM_DISPLAY_TYPE_FIMD,
 			&fimd_controller_ops, fimd_ctx);
 

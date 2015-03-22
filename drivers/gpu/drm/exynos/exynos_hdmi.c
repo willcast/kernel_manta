@@ -2264,9 +2264,10 @@ int hdmi_register_audio_device(struct platform_device *pdev)
 		goto err_device;
 	}
 
+#ifdef CONFIG_OF
 	audio_dev->dev.of_node = of_get_next_child(pdev->dev.of_node, NULL);
+#endif
 	audio_dev->dev.platform_data = (void *)hdata->hpd_gpio;
-
 	ret = platform_device_add(audio_dev);
 	if (ret) {
 		DRM_ERROR("hdmi audio device add failed.\n");
@@ -2318,8 +2319,14 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 	hdata->default_timing = &pdata->timing;
 	hdata->default_bpp = pdata->bpp;
 	hdata->dev = dev;
+#ifdef CONFIG_OF
 	hdata->is_soc_exynos5 = of_device_is_compatible(dev->of_node,
 		"samsung,exynos5-hdmi");
+#elif defined(CONFIG_ARCH_EXYNOS5)
+	hdata->is_soc_exynos5 = true;
+#else
+	hdata->is_soc_exynos5 = false;
+#endif
 
 	ret = hdmi_resources_init(hdata);
 	if (ret) {
@@ -2376,8 +2383,10 @@ static int __devinit hdmi_probe(struct platform_device *pdev)
 
 	hdata->internal_irq = res->start;
 
+#ifdef CONFIG_OF
 	hdata->hpd_gpio = of_get_named_gpio_flags(dev->of_node,
 				"hpd-gpio", 0, &flags);
+#endif
 
 	if (!gpio_is_valid(hdata->hpd_gpio)) {
 		DRM_ERROR("failed to get hpd gpio.");

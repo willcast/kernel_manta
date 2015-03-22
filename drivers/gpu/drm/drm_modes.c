@@ -799,6 +799,38 @@ bool drm_mode_equal(struct drm_display_mode *mode1, struct drm_display_mode *mod
 }
 EXPORT_SYMBOL(drm_mode_equal);
 
+
+/**
+ * drm_mode_equal_no_clocks_no_stereo - test modes for equality
+ * @mode1: first mode
+ * @mode2: second mode
+ *
+ * Check to see if @mode1 and @mode2 are equivalent, but
+ * don't check the pixel clocks nor the stereo layout.
+ *
+ * Returns:
+ * True if the modes are equal, false otherwise.
+ */
+bool drm_mode_equal_no_clocks_no_stereo(const struct drm_display_mode *mode1,
+                                        const struct drm_display_mode *mode2)
+{
+         if (mode1->hdisplay == mode2->hdisplay &&
+            mode1->hsync_start == mode2->hsync_start &&
+            mode1->hsync_end == mode2->hsync_end &&
+            mode1->htotal == mode2->htotal &&
+            mode1->hskew == mode2->hskew &&
+            mode1->vdisplay == mode2->vdisplay &&
+            mode1->vsync_start == mode2->vsync_start &&
+            mode1->vsync_end == mode2->vsync_end &&
+            mode1->vtotal == mode2->vtotal &&
+            mode1->vscan == mode2->vscan)
+                return true;
+
+        return false;
+}
+EXPORT_SYMBOL(drm_mode_equal_no_clocks_no_stereo);
+
+
 /**
  * drm_mode_validate_size - make sure modes adhere to size constraints
  * @dev: DRM device
