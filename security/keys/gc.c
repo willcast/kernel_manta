@@ -174,6 +174,10 @@ static noinline void key_gc_unused_key(struct key *key)
 {
 	key_check(key);
 
+	/* Throw away the key data */
+	if (key->type->destroy)
+		key->type->destroy(key);
+
 	security_key_free(key);
 
 	/* deal with the user's key tracking and quota */
@@ -193,7 +197,6 @@ static noinline void key_gc_unused_key(struct key *key)
 	/* now throw away the key memory */
 	if (key->type->destroy)
 		key->type->destroy(key);
-
 	kfree(key->description);
 
 #ifdef KEY_DEBUGGING
