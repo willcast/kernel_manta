@@ -43,6 +43,7 @@ if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 	echo "";
 	rm UPDATE-AnyKernel2-khaon-kernel-manta-marshmallow*.zip;
 	cd $ANY_KERNEL;
+    git clean -fdx; git reset --hard; git checkout origin/marshmallow;
 	cp $KERNELDIR/arch/arm/boot/zImage zImage;
 	mkdir -p $PACKAGEDIR;
 	zip -r9 $PACKAGEDIR/UPDATE-AnyKernel2-khaon-kernel-manta-marshmallow-"${curdate}".zip * -x README UPDATE-AnyKernel2.zip .git *~;
