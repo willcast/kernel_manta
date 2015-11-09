@@ -558,7 +558,7 @@ endif # $(dot-config)
 # Defaults to vmlinux, but the arch makefile usually adds further targets
 all: vmlinux
 
-KBUILD_CFLAGS	+= -O2 -ftree-vectorize
+KBUILD_CFLAGS	+= -O2 -ftree-vectorize -finline-functions
 
 include $(srctree)/arch/$(SRCARCH)/Makefile
 
