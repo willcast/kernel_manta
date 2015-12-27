@@ -411,7 +411,7 @@ static int exynos_drm_crtc_page_flip(struct drm_crtc *crtc,
 		BUG_ON(exynos_fb->dma_buf !=  buf);
 
 		/* Waiting for the KDS resource*/
-		ret = kds_async_waitall(pkds, KDS_FLAG_LOCKED_WAIT,
+		ret = kds_async_waitall(pkds,
 					&dev_priv->kds_cb, fb, pkds, 1,
 					&shared, &res_list);
 		if (ret) {

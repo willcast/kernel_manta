@@ -33,6 +33,11 @@
 
 #include <linux/pm_runtime.h>
 
+#ifdef CONFIG_ION_EXYNOS
+#include <linux/ion.h>
+extern struct ion_device *ion_exynos;
+#endif
+
 #include "exynos_drm_drv.h"
 #include "exynos_drm_crtc.h"
 #include "exynos_drm_encoder.h"
@@ -82,7 +87,13 @@ static int exynos_drm_load(struct drm_device *dev, unsigned long flags)
 		goto err_kds_rm_fb;
 	}
 #endif
-
+#ifdef CONFIG_ION_EXYNOS
+	private->ion_cl = ion_client_create(ion_exynos, "exynosdrm");
+	if (private->ion_cl < 0) {
+		DRM_ERROR("ion client create failed.\n");
+		goto err_kds_rm_fb;
+	}
+#endif
 	DRM_INIT_WAITQUEUE(&private->wait_vsync_queue);
 	atomic_set(&private->wait_vsync_event, 0);
 
@@ -169,6 +180,9 @@ static int exynos_drm_unload(struct drm_device *dev)
 	drm_vblank_cleanup(dev);
 	drm_kms_helper_poll_fini(dev);
 	drm_mode_config_cleanup(dev);
+#ifdef CONFIG_ION_EXYNOS
+	ion_client_destroy(private->ion_cl);
+#endif
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	kds_callback_term(&private->kds_cb);
 #endif

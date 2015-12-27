@@ -27,6 +27,8 @@
 #include "exynos_drm_fbdev.h"
 #include "exynos_drm_display.h"
 
+extern int s5p_dp_enable(void);
+
 /*
  * FIMD is stand for Fully Interactive Mobile Display and
  * as a display controller, it transfers contents drawn on memory
@@ -114,14 +116,14 @@ struct fimd_context {
 static struct exynos_drm_panel_info manta_drm_panel_info = {
         .timing = {
 	        .name = "Default",
-	        .xres = 2560,
-		.yres = 1600,
-		.left_margin    = 80,
-		.right_margin   = 48,
+	        .xres = 2560, // 2560
+		.yres = 1600, // 1600
+		.left_margin    = 80, // 80
+		.right_margin   = 48, // 48
 		.upper_margin   = 37, // 37
 		.lower_margin   = 3, // 3
-		.hsync_len      = 32,
-		.vsync_len      = 6,
+		.hsync_len      = 32, // 32 
+		.vsync_len      = 6, // 6
 		.sync = 0,
 	},
 	.width_mm = 218,
@@ -790,8 +792,6 @@ static void fimd_window_resume(struct fimd_context *fimd_ctx)
 
 static int fimd_power_on(struct fimd_context *fimd_ctx, bool enable)
 {
-	DRM_DEBUG_KMS("%s\n", __FILE__);
-
 	if (enable) {
 		int ret;
 
@@ -821,6 +821,8 @@ static int fimd_power_on(struct fimd_context *fimd_ctx, bool enable)
 	        writel(DPCLKCON_ENABLE, fimd_ctx->regs + DPCLKCON);
 
 		fimd_window_resume(fimd_ctx);
+
+		s5p_dp_enable();
 	} else {
 		/*
 		 * We need to make sure that all windows are disabled before we

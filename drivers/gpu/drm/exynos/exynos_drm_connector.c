@@ -50,8 +50,15 @@ convert_to_display_mode(struct drm_display_mode *mode,
 {
 	struct fb_videomode *timing = &panel->timing;
 	DRM_DEBUG_KMS("%s\n", __FILE__);
+	
+	if (mode->clock) {
+		mode->clock = timing->pixclock / 1000;
+	} else {
+		mode->clock = timing->refresh *
+				(mode->hsync_end + timing->left_margin) *
+				(mode->vsync_end + timing->upper_margin);
+	}
 
-	mode->clock = timing->pixclock / 1000;
 	mode->vrefresh = timing->refresh;
 
 	mode->hdisplay = timing->xres;

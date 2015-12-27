@@ -50,6 +50,7 @@ struct exynos_drm_gem_buf {
 	struct page		**pages;
 	unsigned long		page_size;
 	unsigned long		size;
+	struct ion_handle	*ion;
 };
 
 /*

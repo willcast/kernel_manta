@@ -31,13 +31,21 @@
 #include "exynos_drm_gem.h"
 #include "exynos_drm_buf.h"
 
+#ifdef CONFIG_ION_EXYNOS
+#include <linux/ion.h>
+#include <linux/exynos_ion.h>
+#endif
+
 static int lowlevel_buffer_allocate(struct drm_device *dev,
 		unsigned int flags, struct exynos_drm_gem_buf *buf)
 {
+	struct exynos_drm_private *private = dev->dev_private;
+
 	dma_addr_t start_addr;
 	unsigned int npages, i = 0;
 	struct scatterlist *sgl;
 	int ret = 0;
+	int use_ion;
 
 	DRM_DEBUG_KMS("%s\n", __FILE__);
 
@@ -51,6 +59,13 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 		return 0;
 	}
 
+//	if (buf->size >= SZ_4M) {
+//		use_ion = 1;
+//	} else {
+		use_ion = 0;
+		buf->ion = NULL;
+//	}
+
 	if (buf->size >= SZ_1M) {
 		npages = buf->size >> SECTION_SHIFT;
 		buf->page_size = SECTION_SIZE;
@@ -62,26 +77,49 @@ static int lowlevel_buffer_allocate(struct drm_device *dev,
 		buf->page_size = PAGE_SIZE;
 	}
 
-	buf->sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
-	if (!buf->sgt) {
-		DRM_ERROR("failed to allocate sg table.\n");
-		return -ENOMEM;
-	}
+	if (use_ion) {
+		buf->ion = ion_alloc(private->ion_cl,
+			buf->size, 0,
+			EXYNOS_ION_HEAP_EXYNOS_MASK,
+			0); 
+		if (IS_ERR(buf->ion)) {
+			DRM_ERROR("ion_alloc failed, size=0x%lx\n", buf->size);
+			return -ENOMEM;
+		}
 
-	ret = sg_alloc_table(buf->sgt, npages, GFP_KERNEL);
-	if (ret < 0) {
-		DRM_ERROR("failed to initialize sg table.\n");
-		kfree(buf->sgt);
-		buf->sgt = NULL;
-		return -ENOMEM;
-	}
+		buf->sgt = ion_sg_table(private->ion_cl, buf->ion);
+		if (!buf->sgt) {
+			DRM_ERROR("failed to get sg table from ion.\n");
+			return -ENOMEM;
+		}
+		buf->kvaddr = ion_map_kernel(private->ion_cl, buf->ion);
+		if (!buf->kvaddr) {
+			DRM_ERROR("failed to get kernel address from ion.\n");
+			return -ENOMEM;
+		}		
+	} else {
+		buf->sgt = kzalloc(sizeof(struct sg_table), GFP_KERNEL);
+		if (!buf->sgt) {
+			DRM_ERROR("failed to allocate sg table.\n");
+			return -ENOMEM;
+		}
 
-	buf->kvaddr = dma_alloc_writecombine(dev->dev, buf->size,
-			&buf->dma_addr, GFP_KERNEL);
-	if (!buf->kvaddr) {
-		DRM_ERROR("failed to allocate buffer.\n");
-		ret = -ENOMEM;
-		goto err1;
+		ret = sg_alloc_table(buf->sgt, npages, GFP_KERNEL);
+		if (ret < 0) {
+			DRM_ERROR("failed to initialize sg table.\n");
+			kfree(buf->sgt);
+			buf->sgt = NULL;
+			return -ENOMEM;
+		}
+		
+
+		buf->kvaddr = dma_alloc_writecombine(dev->dev, buf->size,
+				&buf->dma_addr, GFP_KERNEL);
+		if (!buf->kvaddr) {
+			DRM_ERROR("failed to allocate buffer.\n");
+			ret = -ENOMEM;
+			goto err1;
+		}
 	}
 
 	buf->pages = kzalloc(sizeof(struct page) * npages, GFP_KERNEL);
@@ -124,6 +162,8 @@ err1:
 static void lowlevel_buffer_deallocate(struct drm_device *dev,
 		unsigned int flags, struct exynos_drm_gem_buf *buf)
 {
+	struct exynos_drm_private *private = dev->dev_private;
+
 	DRM_DEBUG_KMS("%s.\n", __FILE__);
 
 	/*
@@ -133,6 +173,12 @@ static void lowlevel_buffer_deallocate(struct drm_device *dev,
 	 */
 	if (IS_NONCONTIG_BUFFER(flags)) {
 		DRM_DEBUG_KMS("not support allocation type.\n");
+		return;
+	}
+
+	if (buf->ion) {
+		ion_unmap_kernel(private->ion_cl, buf->ion);
+		ion_free(private->ion_cl, buf->ion);
 		return;
 	}
 

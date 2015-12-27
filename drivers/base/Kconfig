@@ -181,16 +181,23 @@ config SOC_BUS
 
 source "drivers/base/regmap/Kconfig"
 
+source "drivers/base/kds/Kconfig"
+
 config DMA_SHARED_BUFFER
 	bool
 	default n
 	select ANON_INODES
+	select KDS
+	select DMA_SHARED_BUFFER_USES_KDS
 	depends on EXPERIMENTAL
 	help
 	  This option enables the framework for buffer-sharing between
 	  multiple drivers. A buffer is associated with a file using driver
 	  APIs extension; the file's descriptor can then be passed on to other
 	  driver.
+
+config DMA_SHARED_BUFFER_USES_KDS
+        bool
 
 config SYNC
 	bool "Synchronization framework"

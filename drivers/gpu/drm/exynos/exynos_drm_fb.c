@@ -156,7 +156,7 @@ static void exynos_drm_fb_destroy(struct drm_framebuffer *fb)
 
 		/* Waiting for the KDS resource*/
 		kds_async_waitall(&exynos_fb->kds_res_set_rm_fb,
-				  KDS_FLAG_LOCKED_WAIT, &dev_priv->kds_cb_rm_fb,
+				  &dev_priv->kds_cb_rm_fb,
 				  fb, NULL, 1, &shared, &res_list);
 
 		return;

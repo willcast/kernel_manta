@@ -30,6 +30,8 @@
 #include "exynos_drm_drv.h"
 #include "exynos_drm_display.h"
 
+struct s5p_dp_device *manta_dp = NULL;
+
 static int s5p_dp_init_dp(struct s5p_dp_device *dp)
 {
 	s5p_dp_reset(dp);
@@ -1044,16 +1046,24 @@ static irqreturn_t s5p_dp_irq_handler(int irq, void *arg)
 	return IRQ_HANDLED;
 }
 
-static int s5p_dp_enable(struct s5p_dp_device *dp)
+int s5p_dp_enable(void)
 {
+	struct s5p_dp_device *dp = manta_dp;
 	int ret = 0;
 	int retry = 0;
+	
+	if (dp == NULL)
+		return -EINVAL;
+
 	struct s5p_dp_platdata *pdata = dp->dev->platform_data;
 
 	mutex_lock(&dp->lock);
 
 	if (dp->enabled)
-		goto out;
+	{	
+		mutex_unlock(&dp->lock);
+		return -EINVAL;
+	}
 
 	dp->enabled = 1;
 
@@ -1143,12 +1153,20 @@ out:
 	}
 	dev_err(dp->dev, "DP LT exceeds max retry count");
 
+	dp->enabled = 0;
+	
 	mutex_unlock(&dp->lock);
 	return ret;
 }
+EXPORT_SYMBOL(s5p_dp_enable);
 
-static void s5p_dp_disable(struct s5p_dp_device *dp)
+static void s5p_dp_disable(void)
 {
+	struct s5p_dp_device *dp = manta_dp;
+	
+	if (dp == NULL)
+		return -EINVAL;
+
 	struct s5p_dp_platdata *pdata = dp->dev->platform_data;
 
 	mutex_lock(&dp->lock);
@@ -1178,11 +1196,11 @@ static int s5p_dp_set_power(struct lcd_device *lcd, int power)
 	int retval;
 
 	if (power == FB_BLANK_UNBLANK) {
-		retval = s5p_dp_enable(dp);
+		retval = s5p_dp_enable();
 		if (retval < 0)
 			return retval;
 	} else {
-		s5p_dp_disable(dp);
+		s5p_dp_disable();
 	}
 
 	return 0;
@@ -1197,10 +1215,14 @@ static int exynos_dp_subdrv_probe(void *ctx, struct drm_device *drm_dev)
 
 static int exynos_dp_power(void *ctx, int mode)
 {
-	struct exynos_dp_device *dp = ctx;
-
+	struct s5p_dp_device *dp = ctx;
+	int retval;
+	
 	switch (mode) {
 	case DRM_MODE_DPMS_ON:
+		retval = s5p_dp_enable();
+		if (retval < 0)
+			return retval;
 		return 0;
 
 	case DRM_MODE_DPMS_STANDBY:
@@ -1227,13 +1249,8 @@ static int exynos_dp_check_timing(void *ctx, void *timing)
 
 static bool exynos_dp_is_connected(void *ctx)
 {
-	struct exynos_dp_device *dp = ctx;
-	int ret;
-
-	ret = s5p_dp_detect_hpd(dp);
-	return !ret;
+	return 1;
 }
-
 
 static struct exynos_panel_ops dp_panel_ops = {
 	.subdrv_probe = exynos_dp_subdrv_probe,
@@ -1317,12 +1334,10 @@ static int __devinit s5p_dp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, dp);
 
+	manta_dp = dp;
+
 	exynos_display_attach_panel(EXYNOS_DRM_DISPLAY_TYPE_FIMD, &dp_panel_ops,
 			dp);
-
-	ret = s5p_dp_enable(dp);
-	if (ret)
-		goto err_fb;
 
 	return 0;
 
@@ -1351,7 +1366,7 @@ static int __devexit s5p_dp_remove(struct platform_device *pdev)
 
 	lcd_device_unregister(dp->lcd);
 
-	s5p_dp_disable(dp);
+	s5p_dp_disable();
 
 	iounmap(dp->reg_base);
 	clk_put(dp->clock);
@@ -1378,7 +1393,7 @@ static int  s5p_dp_shutdown(struct platform_device *pdev)
 	if (pdata->lcd_off)
 		pdata->lcd_off();
 
-	s5p_dp_disable(dp);
+	s5p_dp_disable();
 
 	free_irq(dp->irq, dp);
 	iounmap(dp->reg_base);

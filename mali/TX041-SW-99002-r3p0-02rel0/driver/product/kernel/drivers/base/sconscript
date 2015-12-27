@@ -1,0 +1,55 @@
+#
+# (C) COPYRIGHT 2010-2012 ARM Limited. All rights reserved.
+#
+# This program is free software and is provided to you under the terms of the
+# GNU General Public License version 2 as published by the Free Software
+# Foundation, and any use by you of this program is subject to the terms
+# of such GNU licence.
+#
+# A copy of the licence is included with the program, and can also be obtained
+# from Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+# Boston, MA  02110-1301, USA.
+#
+#
+
+
+import os
+Import('env')
+
+if Glob('dma_buf_lock/sconscript'):
+	SConscript('dma_buf_lock/sconscript')
+
+if Glob('kds/sconscript'):
+	SConscript('kds/sconscript')
+
+if Glob('ump/sconscript'):
+	SConscript('ump/sconscript')
+
+# don't build the dma-buf-test_exporter if it does not exist
+if not Glob('#kernel/drivers/base/dma-buf-test-exporter.c'):
+	Return()
+
+if env['v'] != '1':
+	env['MAKECOMSTR'] = '[MAKE] ${SOURCE.dir}'
+
+src = [Glob('#kernel/drivers/base/*.c'), Glob('#kernel/include/linux/*.h'), Glob('#kernel/drivers/base/K*')]
+
+env.Append( CPPPATH = '#kernel/include' )
+
+arch = env['arch']
+# translate into something Linux understands
+if arch == 'x86_32':
+	arch = 'x86'
+elif 'arm' in arch:
+	arch = 'arm'
+
+if env.GetOption('clean') :
+	env.Execute(Action("make ARCH=%s clean" % arch, '[CLEAN] dma-buf-test-exporter'))
+	cmd = env.Command('$STATIC_LIB_PATH/dma-buf-test-exporter.ko', src, [])
+	env.ProgTarget('dma-buf-test-exporter', cmd)
+else:
+	makeAction=Action("cd ${SOURCE.dir} && make ARCH=%s && ( ( [ -f dma-buf-test-exporter.ko ] && cp dma-buf-test-exporter.ko $STATIC_LIB_PATH/ ) || touch $STATIC_LIB_PATH/dma-buf-test-exporter.ko)" % (arch), '$MAKECOMSTR')
+	cmd = env.Command('$STATIC_LIB_PATH/dma-buf-test-exporter.ko', src, [makeAction])
+	env.ProgTarget('dma-buf-test-exporter', cmd)
+
+	

@@ -44,6 +44,10 @@
 #include <linux/dma-buf.h>
 #endif
 
+#ifdef CONFIG_ION_EXYNOS
+#include <linux/ion.h>
+#endif
+
 #define MAX_CRTC	3
 #define MAX_PLANE	5
 #define MAX_FB_BUFFER	4
@@ -148,6 +152,9 @@ struct exynos_drm_private {
 #ifdef CONFIG_DMA_SHARED_BUFFER_USES_KDS
 	struct kds_callback kds_cb;
 	struct kds_callback kds_cb_rm_fb;
+#endif
+#ifdef CONFIG_ION_EXYNOS
+	struct ion_client *ion_cl;
 #endif
 #ifdef CONFIG_DRM_EXYNOS_DEBUG
 	struct {
