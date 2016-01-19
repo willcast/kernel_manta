@@ -13,13 +13,13 @@ txtrst=$(tput sgr0) # Reset
 
 export KERNELDIR=`readlink -f .`;
 export PARENT_DIR=`readlink -f ..`;
-export ANY_KERNEL=/mnt/sdb3/Documents/kernels/AnyKernel2;
+export ANY_KERNEL=/home/khaon/android/kernel/AnyKernel2;
 export ARCH=arm;
 export CCACHE_DIR=/home/khaon/caches/.ccache_kernels;
-export PACKAGEDIR=/home/khaon/Documents/kernels/Packages;
-export CROSS_COMPILE="ccache /mnt/sdb3/Documents/kernels/toolchains/arm-cortex_a15-linux-gnueabihf-linaro_4.7.4-2014.06/bin/arm-cortex_a15-linux-gnueabihf-";
-export MKBOOTIMG=/mnt/sdb3/Documents/kernels/mkbootimg_tools/mkboot;
-export MKBOOTIMG_TOOLTS_ZIMAGE_MANTA_FOLDER=/mnt/sdb3/Documents/kernels/mkbootimg_tools/manta_temasek;
+export PACKAGEDIR=/home/khaon/android/kernel/Packages;
+export CROSS_COMPILE="ccache /home/khaon/android/kernel/linaro-4.7.4/bin/arm-cortex_a15-linux-gnueabihf-";
+export MKBOOTIMG=/home/khaon/android/kernel/mkbootimg_tools/mkboot;
+export MKBOOTIMG_TOOLTS_ZIMAGE_MANTA_FOLDER=/home/khaon/android/kernel/mkbootimg_tools/manta_temasek;
 echo "${txtbld} Remove old zImage ${txtrst}";
 
 make mrproper;
@@ -51,4 +51,3 @@ if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 else
 	echo "KERNEL DID NOT BUILD! no zImage exist"
 fi;
-
