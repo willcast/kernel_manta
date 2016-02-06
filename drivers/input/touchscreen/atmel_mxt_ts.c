@@ -792,12 +792,8 @@ static void mxt_input_touchevent(struct mxt_data *data,
 	finger[id].pressure = pressure;
 	finger[id].vector = vector;
 
-	if (status & MXT_PRESS) {
-		current_time = ktime_to_us(ktime_get());
-		if(last_input_time + DEFAULT_BOOST_TIME_OUT < current_time) {
-			last_input_time = current_time;
-		}
-	}
+	if (status & MXT_PRESS)
+		last_input_time = ktime_to_us(ktime_get());
 	mxt_input_report(data);
 }
 
