@@ -70,7 +70,7 @@ static int mali_gpu_vol = 1250000;	/* 1.25V @ 533 MHz */
 
 static struct exynos5_bus_mif_handle *mem_freq_req;
 
-#define DEFAULT_BOOSTED_TIME_DURATION 200000
+#define DEFAULT_BOOSTED_TIME_DURATION 2500000
 
 /***********************************************************/
 /*  This table and variable are using the check time share of GPU Clock  */
