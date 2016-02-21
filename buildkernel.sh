@@ -17,7 +17,7 @@ export ANY_KERNEL=/home/khaon/android/kernel/AnyKernel2;
 export ARCH=arm;
 export CCACHE_DIR=/home/khaon/caches/.ccache_kernels;
 export PACKAGEDIR=/home/khaon/android/kernel/Packages;
-export CROSS_COMPILE="ccache /home/khaon/android/kernel/linaro-4.7.4/bin/arm-cortex_a15-linux-gnueabihf-";
+export CROSS_COMPILE="ccache /home/khaon/android/rom/aosp_master/prebuilts/gcc/linux-x86/arm/arm-eabi-4.7/bin/arm-eabi-";
 export MKBOOTIMG=/home/khaon/android/kernel/mkbootimg_tools/mkboot;
 export MKBOOTIMG_TOOLTS_ZIMAGE_MANTA_FOLDER=/home/khaon/android/kernel/mkbootimg_tools/manta_temasek;
 echo "${txtbld} Remove old zImage ${txtrst}";
