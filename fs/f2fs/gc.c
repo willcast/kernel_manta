@@ -587,7 +587,8 @@ static void move_encrypted_block(struct inode *inode, block_t bidx)
 	allocate_data_block(fio.sbi, NULL, fio.old_blkaddr, &newaddr,
 							&sum, CURSEG_COLD_DATA);
 
-	fio.encrypted_page = grab_cache_page(META_MAPPING(fio.sbi), fio.new_blkaddr);
+	fio.encrypted_page = f2fs_grab_cache_page(META_MAPPING(fio.sbi),
+							newaddr, true);
 	if (!fio.encrypted_page) {
 		err = -ENOMEM;
 		goto recover_block;
