@@ -433,7 +433,7 @@ void mali_dvfs_freq_unlock(void)
 	unsigned long flags;
 #ifdef CONFIG_MALI_MIDGARD_FREQ_LOCK
 	spin_lock_irqsave(&mali_dvfs_spinlock, flags);
-	mali_dvfs_status_current.upper_lock = kbase_platform_dvfs_get_level(533);
+	mali_dvfs_status_current.upper_lock = kbase_platform_dvfs_get_level(720);
 	spin_unlock_irqrestore(&mali_dvfs_spinlock, flags);
 #endif
 	printk(KERN_DEBUG "[G3D] Upper Lock Unset\n");
