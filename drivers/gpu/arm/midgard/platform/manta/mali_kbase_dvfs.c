@@ -771,7 +771,7 @@ int kbase_platform_dvfs_set_avs_table(char *buf)
 	if (buf == NULL)
 		return 0;
 
-	ret = sscanf(buf, "%dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV ",  &u[0], &u[1], &u[2], &u[3], &u[4], &u[5], &u[6], &u[7], &u[8], &u[9], &u[10], &u[11], &u[12], &u[13]);
+	ret = sscanf(buf, "%dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV %dmhz: %d mV",  &u[0], &u[1], &u[2], &u[3], &u[4], &u[5], &u[6], &u[7], &u[8], &u[9], &u[10], &u[11], &u[12], &u[13], &u[14], &u[15], &u[16], &u[17], &u[18], &u[19]);
 
 	if (ret != 2 * MALI_DVFS_STEP) {
 		return -EINVAL;
